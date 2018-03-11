@@ -12,15 +12,16 @@ import java.rmi.RemoteException;
 import java.util.HashMap;
 import java.util.Map;
 
-import distributed.systems.das.BattleField;
+import distributed.systems.das.GameServer;
 import distributed.systems.das.GameState;
 import distributed.systems.das.Message;
 import distributed.systems.das.MessageRequest;
+import distributed.systems.das.RequestHandlingServer;
 import distributed.systems.das.communication.NodeAddress;
 import distributed.systems.das.services.MessagingHandler;
 
 
-public abstract class Unit implements Serializable, MessagingHandler{
+public abstract class Unit implements Serializable{
 	// Position of the unit
 	protected int x, y;
 
@@ -34,23 +35,11 @@ public abstract class Unit implements Serializable, MessagingHandler{
 	// Identifier of the unit
 	private int unitID;
 
-	// The communication socket between this client and the board
-	protected Socket clientSocket = null;
-	
-	// Map messages from their ids
-	private Map<Integer, Message> messageList;
 	// Is used for mapping an unique id to a message sent by this unit
 	private int localMessageCounter = 0;
 	
 	// If this is set to false, the unit will return its run()-method and disconnect from the server
 	protected boolean running;
-
-	/* The thread that is used to make the unit run in a separate thread.
-	 * We need to remember this thread to make sure that Java exits cleanly.
-	 * (See stopRunnerThread())
-	 */
-	protected Thread runnerThread;
-
 	public enum Direction {
 		up, right, down, left
 	};
@@ -70,24 +59,12 @@ public abstract class Unit implements Serializable, MessagingHandler{
 	 * this specific unit.
 	 */
 	public Unit(int maxHealth, int attackPoints) {
-
-		messageList = new HashMap<Integer, Message>();
 		// Initialize the max health and health
 		hitPoints = maxHitPoints = maxHealth;
 		// Initialize the attack points
 		this.attackPoints = attackPoints;
 		// Get a new unit id
-		unitID = BattleField.getBattleField().getNewUnitID();
-		this.serverAddress = serverAddress; 
-		try {
-			clientSocket = new Socket(serverAddress.ipAddress, serverAddress.port);
-		} catch (UnknownHostException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
+		unitID = GameServer.getBattleField().getNewUnitID();
 	}
 	
 	/**
@@ -110,35 +87,15 @@ public abstract class Unit implements Serializable, MessagingHandler{
 			removeUnit(x, y);
 	}
 	
-	protected Unit getUnit(int x, int y)
+	protected Message getUnit(int x, int y)
 	{
 		Message getMessage = new Message(), result;
-		int id = localMessageCounter++;
+		int id = RequestHandlingServer.localMessageCounter++;
 		getMessage.put("request", MessageRequest.getUnit);
 		getMessage.put("x", x);
 		getMessage.put("y", y);
 		getMessage.put("id", id);
-
-		// Send the getUnit message
-		sendMessage(getMessage);		
-		getUnit(x, y);
-		
-		// Wait for the reply
-		while(!messageList.containsKey(id)) {
-			try {
-				Thread.sleep(50);
-			} catch (InterruptedException e) {
-			}
-
-		// Quit if the game window has closed
-		if (!GameState.getRunningState())
-			return null;
-		}
-
-		result = messageList.get(id);
-		messageList.put(id, null);
-
-		return (Unit) result.get("unit");	
+		return getMessage;
 	}
 
 	protected boolean spawn(int x, int y) {
@@ -146,38 +103,19 @@ public abstract class Unit implements Serializable, MessagingHandler{
 		 * the unit has actually spawned at the
 		 * designated position. 
 		 */
-		int id = localMessageCounter++;
+		int id = RequestHandlingServer.localMessageCounter++;
 		Message spawnMessage = new Message();
 		spawnMessage.put("request", MessageRequest.spawnUnit);
 		spawnMessage.put("x", x);
 		spawnMessage.put("y", y);
 		spawnMessage.put("unit", this);
 		spawnMessage.put("id", id);
-		Unit spawnedUnit = null;
-		// Send a spawn message
-		try {
-			PrintWriter out = new PrintWriter(clientSocket.getOutputStream(), true);
-			out.print(spawnMessage);
-			spawnedUnit = getUnit(x, y);
-		} catch (UnknownHostException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();			
-		}	
-		if(spawnedUnit.unitID == this.unitID) {
-			return true;
-		}
-		else {
-			return true;
-		}
 	}
 	
 	protected void removeUnit(int x, int y)
 	{
 		Message removeMessage = new Message();
-		int id = localMessageCounter++;
+		int id = RequestHandlingServer.localMessageCounter++;
 		removeMessage.put("request", MessageRequest.removeUnit);
 		removeMessage.put("x", x);
 		removeMessage.put("y", y);
@@ -195,7 +133,7 @@ public abstract class Unit implements Serializable, MessagingHandler{
 	 */
 	protected UnitType getType(int x, int y) {
 		Message getMessage = new Message(), result;
-		int id = localMessageCounter++;
+		int id = RequestHandlingServer.localMessageCounter++;
 		getMessage.put("request", MessageRequest.getType);
 		getMessage.put("x", x);
 		getMessage.put("y", y);
@@ -232,8 +170,7 @@ public abstract class Unit implements Serializable, MessagingHandler{
 		int id;
 		Message damageMessage;
 		synchronized (this) {
-			id = localMessageCounter++;
-		
+			id = RequestHandlingServer.localMessageCounter++;	
 			damageMessage = new Message();
 			damageMessage.put("request", MessageRequest.dealDamage);
 			damageMessage.put("x", x);
@@ -241,7 +178,6 @@ public abstract class Unit implements Serializable, MessagingHandler{
 			damageMessage.put("damage", damage);
 			damageMessage.put("id", id);
 		}
-		
 		// Send a spawn message
 		sendMessage(damageMessage);
 	}
@@ -253,7 +189,7 @@ public abstract class Unit implements Serializable, MessagingHandler{
 		int id;
 		Message healMessage;
 		synchronized (this) {
-			id = localMessageCounter++;
+			id = RequestHandlingServer.localMessageCounter++;
 
 			healMessage = new Message();
 			healMessage.put("request", MessageRequest.healDamage);
@@ -322,7 +258,7 @@ public abstract class Unit implements Serializable, MessagingHandler{
 	protected void moveUnit(int x, int y)
 	{
 		Message moveMessage = new Message();
-		int id = localMessageCounter++;
+		int id = RequestHandlingServer.localMessageCounter++;
 		moveMessage.put("request", MessageRequest.moveUnit);
 		moveMessage.put("x", x);
 		moveMessage.put("y", y);
@@ -369,18 +305,4 @@ public abstract class Unit implements Serializable, MessagingHandler{
 		}
 		
 	}
-	
-	private void sendMessage(Message message) {
-		try {
-			PrintWriter out = new PrintWriter(clientSocket.getOutputStream(), true);
-			out.print(message);
-		} catch (UnknownHostException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();						
-		}
-	}
-	
 }

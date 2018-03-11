@@ -3,7 +3,7 @@ package distributed.systems.das.units;
 import java.io.Serializable;
 import java.util.ArrayList;
 
-import distributed.systems.das.BattleField;
+import distributed.systems.das.GameServer;
 import distributed.systems.das.GameState;
 
 public class Dragon extends Unit implements Runnable, Serializable{
@@ -66,13 +66,13 @@ public class Dragon extends Unit implements Runnable, Serializable{
 				if (getY() > 0)
 					if ( getType( getX(), getY() - 1 ) == UnitType.player )
 						adjacentPlayers.add(Direction.up);
-				if (getY() < BattleField.MAP_WIDTH - 1)
+				if (getY() < GameServer.MAP_WIDTH - 1)
 					if ( getType( getX(), getY() + 1 ) == UnitType.player )
 						adjacentPlayers.add(Direction.down);
 				if (getX() > 0)
 					if ( getType( getX() - 1, getY() ) == UnitType.player )
 						adjacentPlayers.add(Direction.left);
-				if (getX() < BattleField.MAP_WIDTH - 1)
+				if (getX() < GameServer.MAP_WIDTH - 1)
 					if ( getType( getX() + 1, getY() ) == UnitType.player )
 						adjacentPlayers.add(Direction.right);
 				

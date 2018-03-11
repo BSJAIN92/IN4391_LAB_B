@@ -4,7 +4,7 @@ import java.io.Serializable;
 import java.net.Socket;
 import java.rmi.RemoteException;
 
-import distributed.systems.das.BattleField;
+import distributed.systems.das.GameServer;
 import distributed.systems.das.GameState;
 import distributed.systems.das.Message;
 import distributed.systems.das.services.MessagingHandler;
@@ -24,7 +24,7 @@ public class Player extends Unit implements Runnable, Serializable, MessagingHan
 	
 	private static final long serialVersionUID = -3507657523648823999L;
 	
-	public Player(int maxHealth, int attackPoints) {
+	public Player(int x, int y) {
 		
 		/* Initialize the hitpoints and attackpoints */
 		super((int)(Math.random() * (MAX_HITPOINTS - MIN_HITPOINTS) + MIN_HITPOINTS), (int)(Math.random() * (MAX_ATTACKPOINTS - MIN_ATTACKPOINTS) + MIN_ATTACKPOINTS));
@@ -68,7 +68,7 @@ public class Player extends Unit implements Runnable, Serializable, MessagingHan
 						targetY = this.getY() - 1;
 						break;
 					case down:
-						if (this.getY() >= BattleField.MAP_HEIGHT - 1)
+						if (this.getY() >= GameServer.MAP_HEIGHT - 1)
 							// The player was at the edge of the map, so he can't move south and there are no units there
 							continue;
 
@@ -84,7 +84,7 @@ public class Player extends Unit implements Runnable, Serializable, MessagingHan
 						targetY = this.getY();
 						break;
 					case right:
-						if (this.getX() >= BattleField.MAP_WIDTH - 1)
+						if (this.getX() >= GameServer.MAP_WIDTH - 1)
 							// The player was at the edge of the map, so he can't move east and there are no units there
 							continue;
 
