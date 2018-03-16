@@ -3,8 +3,9 @@ package distributed.systems.das.services;
 import java.rmi.Remote;
 import java.rmi.RemoteException;
 
-import distributed.systems.das.Message;
+import distributed.systems.das.common.Message;
 
 public interface MessagingHandler extends Remote {
-	void onMessageReceived(Message message) throws RemoteException;
+	Message onMessageReceived(Message message) throws RemoteException;
+	void onSynchronizationMessageReceived(Message message) throws RemoteException;
 }

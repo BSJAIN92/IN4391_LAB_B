@@ -1,12 +1,15 @@
 package distributed.systems.das.units;
 
-import java.io.Serializable;
 import java.util.ArrayList;
 
 import distributed.systems.das.GameServer;
 import distributed.systems.das.GameState;
+import distributed.systems.das.RequestHandlingServer;
+import distributed.systems.das.common.Direction;
+import distributed.systems.das.common.UnitState;
+import distributed.systems.das.common.UnitType;
 
-public class Dragon extends Unit implements Runnable, Serializable{
+public class Dragon implements Runnable{
 	/* Reaction speed of the dragon
 	 * This is the time needed for the dragon to take its next turn.
 	 * Measured in half a seconds x GAME_SPEED.
@@ -14,27 +17,17 @@ public class Dragon extends Unit implements Runnable, Serializable{
 	protected int timeBetweenTurns; 
 	public static final int MIN_TIME_BETWEEN_TURNS = 2;
 	public static final int MAX_TIME_BETWEEN_TURNS = 7;
-	// The minimum and maximum amount of hitpoints that a particular dragon starts with
-	public static final int MIN_HITPOINTS = 50;
-	public static final int MAX_HITPOINTS = 100;
-	// The minimum and maximum amount of hitpoints that a particular dragon has
-	public static final int MIN_ATTACKPOINTS = 5;
-	public static final int MAX_ATTACKPOINTS = 20;
-	
+	Thread runnerThread;
+	RequestHandlingServer battlefield;
+	UnitState unit;
 	/**
 	 * Spawn a new dragon, initialize the 
 	 * reaction speed 
 	 */
-	public Dragon(int x, int y) {
-		/* Spawn the dragon with a random number of hitpoints between
-		 * 50..100 and 5..20 attackpoints. */
-		super((int)(Math.random() * (MAX_HITPOINTS - MIN_HITPOINTS) + MIN_HITPOINTS), (int)(Math.random() * (MAX_ATTACKPOINTS - MIN_ATTACKPOINTS) + MIN_ATTACKPOINTS));
+	public Dragon(UnitState unit) {
 		/* Create a random delay */
 		timeBetweenTurns = (int)(Math.random() * (MAX_TIME_BETWEEN_TURNS - MIN_TIME_BETWEEN_TURNS)) + MIN_TIME_BETWEEN_TURNS;
-
-		if (!spawn(x, y))
-			return; // We could not spawn on the battlefield
-
+		battlefield = RequestHandlingServer.getRequestHandlingServer();
 		/* Awaken the dragon */
 		//new Thread(this).start();
 		runnerThread = new Thread(this);
@@ -49,31 +42,29 @@ public class Dragon extends Unit implements Runnable, Serializable{
 	 * It checks if an enemy is near and, if so, it attacks that
 	 * specific enemy.
 	 */
-	@SuppressWarnings("static-access")
 	public void run() {
-		ArrayList <Direction> adjacentPlayers = new ArrayList<Direction> ();		
-		this.running = true;
-		while(GameState.getRunningState() && this.running) {
+		ArrayList<Direction> adjacentPlayers = new ArrayList<Direction> ();		
+		while(GameState.getRunningState()) {
 			try {
 				/* Sleep while the dragon is considering its next move */
 				Thread.currentThread().sleep((int)(timeBetweenTurns * 500 * GameState.GAME_SPEED));
 
 				/* Stop if the dragon runs out of hitpoints */
-				if (getHitPoints() <= 0)
+				if (unit.hitPoints <= 0)
 					break;
 
 				// Decide what players are near
-				if (getY() > 0)
-					if ( getType( getX(), getY() - 1 ) == UnitType.player )
+				if (unit.y > 0)
+					if ( battlefield.getUnit( unit.x, unit.y - 1 ).unitType == UnitType.Player )
 						adjacentPlayers.add(Direction.up);
-				if (getY() < GameServer.MAP_WIDTH - 1)
-					if ( getType( getX(), getY() + 1 ) == UnitType.player )
+				if (unit.y < GameServer.MAP_WIDTH - 1)
+					if ( battlefield.getUnit( unit.x, unit.y + 1 ).unitType == UnitType.Player )
 						adjacentPlayers.add(Direction.down);
-				if (getX() > 0)
-					if ( getType( getX() - 1, getY() ) == UnitType.player )
+				if (unit.x > 0)
+					if ( battlefield.getUnit( unit.x - 1, unit.y ).unitType == UnitType.Player )
 						adjacentPlayers.add(Direction.left);
-				if (getX() < GameServer.MAP_WIDTH - 1)
-					if ( getType( getX() + 1, getY() ) == UnitType.player )
+				if (unit.x < GameServer.MAP_WIDTH - 1)
+					if ( battlefield.getUnit( unit.x + 1, unit.y ).unitType == UnitType.Player )
 						adjacentPlayers.add(Direction.right);
 				
 				// Pick a random player to attack
@@ -84,16 +75,16 @@ public class Dragon extends Unit implements Runnable, Serializable{
 				// Attack the player
 				switch (playerToAttack) {
 					case up:
-						this.dealDamage( getX(), getY() - 1, this.getAttackPoints() );
+						battlefield.dealDamage( unit, unit.x, unit.y - 1);
 						break;
 					case right:
-						this.dealDamage( getX() + 1, getY(), this.getAttackPoints() );
+						battlefield.dealDamage(unit,  unit.x + 1, unit.y);
 						break;
 					case down:
-						this.dealDamage( getX(), getY() + 1, this.getAttackPoints() );
+						battlefield.dealDamage( unit, unit.x, unit.y + 1);
 						break;
 					case left:
-						this.dealDamage( getX() - 1, getY(), this.getAttackPoints() );
+						battlefield.dealDamage( unit, unit.x - 1, unit.y);
 						break;
 				}
 				

@@ -1,6 +1,5 @@
 package distributed.systems.das;
 
-import java.net.Socket;
 import java.rmi.NotBoundException;
 import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
@@ -9,30 +8,29 @@ import java.rmi.server.UnicastRemoteObject;
 import java.util.ArrayList;
 import java.util.HashMap;
 
+import distributed.systems.das.common.Message;
+import distributed.systems.das.common.MessageType;
+import distributed.systems.das.common.UnitState;
+import distributed.systems.das.common.UnitType;
 import distributed.systems.das.services.MessagingHandler;
-import distributed.systems.das.units.Dragon;
-import distributed.systems.das.units.Player;
-import distributed.systems.das.units.Unit;
-import distributed.systems.das.units.Unit.UnitType;
 
 public class GameServer implements MessagingHandler {
+
+	//updates to the following members must be synchronized. At any give time only one thread can update these values.
+	private UnitState[][] map;
+	private int lastUnitId = 0;
+	private int syncMessageId = 0;
 	
-	private Unit[][] map;
 	private static GameServer battlefield;
 	private static int numberOfReqServers = 3;
 	public final static int MAP_WIDTH = 25;
-	public final static int MAP_HEIGHT = 25;
-	private ArrayList <Unit> units;  
-	/* The last id that was assigned to an unit. This variable is used to
-	 * enforce that each unit has its own unique id.
-	 */
-	private int lastUnitID = 0;
+	public final static int MAP_HEIGHT = 25;  
 	private static HashMap<String, MessagingHandler> requestHandlingServers = new HashMap<String, MessagingHandler>();
-	private static HashMap<String, ArrayList<Unit>> setup= new HashMap<String, ArrayList<Unit>>();
+	private static HashMap<String, ArrayList<UnitState>> setupPlayers= new HashMap<String, ArrayList<UnitState>>();
+	private static HashMap<String, ArrayList<UnitState>> setupDragons= new HashMap<String, ArrayList<UnitState>>();
 	
 	private GameServer() {
-		map = new Unit[MAP_WIDTH][MAP_HEIGHT];
-		units = new ArrayList<>();
+		map = new UnitState[MAP_WIDTH][MAP_HEIGHT];
 	}
 	
 	public static GameServer getBattleField() {
@@ -47,8 +45,16 @@ public class GameServer implements MessagingHandler {
 	 * @return int: a new unique unit ID.
 	 */
 	public synchronized int getNewUnitID() {
-		return ++lastUnitID;
+		return ++lastUnitId;
 	}
+	/**
+	 * Returns a new unique unit ID.
+	 * @return int: a new unique unit ID.
+	 */
+	public synchronized int getNewSyncMessageId() {
+		return ++syncMessageId;
+	}
+	
 	
 	/**
 	 * Puts a new unit at the specified position. First, it
@@ -63,18 +69,35 @@ public class GameServer implements MessagingHandler {
 	 * @return true when the unit has been put on the 
 	 * specified position.
 	 */
-	private boolean spawnUnit(Unit unit, int x, int y)
+	private UnitState spawnUnit(int x, int y, UnitType unitType, String origin)
 	{
+		UnitState unit = null;
+		//acquiring the intrinsic lock associated with 'this' instance of GameServer. 
+		//As the GameServer is a singleton, all threads operate on the sole instance of the class. 
 		synchronized (this) {
-			if (map[x][y] != null)
-				return false;
-	
-			map[x][y] = unit;
-			unit.setPosition(x, y);
+			if (map[x][y] == null) {
+				unit = new UnitState(x, y, getNewUnitID(), unitType, origin);
+				map[x][y] = unit;
+				map[x][y].setPosition(x, y);
+			}
 		}
-		units.add(unit);
+		return unit;
+	}
 
-		return true;
+	/**
+	 * Get a unit from a position.
+	 * 
+	 * @param x position.
+	 * @param y position.
+	 * @return the unit at the specified position, or return
+	 * null if there is no unit at that specific position.
+	 */
+	public UnitState getUnit(int x, int y)
+	{
+		assert x >= 0 && x < map.length;
+		assert y >= 0 && x < map[0].length;
+
+		return map[x][y];
 	}
 
 	/**
@@ -89,33 +112,16 @@ public class GameServer implements MessagingHandler {
 	 * @return true when the unit has been put on the 
 	 * specified position.
 	 */
-	private synchronized boolean putUnit(Unit unit, int x, int y)
+	private synchronized boolean putUnit(UnitState unit, int x, int y)
 	{
 		if (map[x][y] != null)
 			return false;
 
 		map[x][y] = unit;
 		unit.setPosition(x, y);
-
 		return true;
 	}
-
-	/**
-	 * Get a unit from a position.
-	 * 
-	 * @param x position.
-	 * @param y position.
-	 * @return the unit at the specified position, or return
-	 * null if there is no unit at that specific position.
-	 */
-	public Unit getUnit(int x, int y)
-	{
-		assert x >= 0 && x < map.length;
-		assert y >= 0 && x < map[0].length;
-
-		return map[x][y];
-	}
-
+	
 	/**
 	 * Move the specified unit a certain number of steps.
 	 * 
@@ -125,24 +131,18 @@ public class GameServer implements MessagingHandler {
 	 * 
 	 * @return true on success.
 	 */
-	private synchronized boolean moveUnit(Unit unit, int newX, int newY)
+	private synchronized UnitState moveUnit(int originalX, int originalY, int newX, int newY)
 	{
-		int originalX = unit.getX();
-		int originalY = unit.getY();
-
-		if (unit.getHitPoints() <= 0)
-			return false;
-
-		if (newX >= 0 && newX < GameServer.MAP_WIDTH)
-			if (newY >= 0 && newY < GameServer.MAP_HEIGHT)
+		UnitState unit = getUnit(originalX, originalY);
+		if (newX >= 0 && newX < MAP_WIDTH)
+			if (newY >= 0 && newY < MAP_HEIGHT)
 				if (map[newX][newY] == null) {
 					if (putUnit(unit, newX, newY)) {
-						map[originalX][originalY] = null;
-						return true;
+						removeUnit(originalX, originalY);
+						return map[newX][newY];
 					}
 				}
-
-		return false;
+		return map[originalX][originalY];
 	}
 
 	/**
@@ -153,38 +153,41 @@ public class GameServer implements MessagingHandler {
 	 */
 	private synchronized void removeUnit(int x, int y)
 	{
-		Unit unitToRemove = this.getUnit(x, y);
+		UnitState unitToRemove = this.getUnit(x, y);
 		if (unitToRemove == null)
 			return; // There was no unit here to remove
 		map[x][y] = null;
-		unitToRemove.disconnect();
-		units.remove(unitToRemove);
 	}
-
+	
+	
 	@Override
-	public void onMessageReceived(Message msg) throws RemoteException {
+	public Message onMessageReceived(Message msg) throws RemoteException {
 		Message reply = null;
+		Message sync = null;
 		String origin = (String)msg.get("origin");
-		MessageRequest request = (MessageRequest)msg.get("request");
-		Unit unit;
+		MessageType request = (MessageType)msg.get("request");
+		UnitState unit;
 		switch(request)
 		{
 			case spawnUnit:
-				this.spawnUnit((Unit)msg.get("unit"), (Integer)msg.get("x"), (Integer)msg.get("y"));
-				break;
-			case putUnit:
-				this.putUnit((Unit)msg.get("unit"), (Integer)msg.get("x"), (Integer)msg.get("y"));
+				unit = this.spawnUnit((Integer)msg.get("x"), (Integer)msg.get("y"), (UnitType)msg.get("unitType"), origin);
+				reply = new Message();
+				reply.put("id", msg.get("id"));
+				reply.put("unit", unit);
+				
+				//tell all other request handling servers that a new unit has spawned
+				sync = new Message();
+				sync.put("id", getNewSyncMessageId());
+				sync.put("request", MessageType.sync);
+				sync.put("type", MessageType.spawnUnit);
+				sync.put("unit", unit);	
 				break;
 			case getUnit:
 			{
 				reply = new Message();
 				int x = (Integer)msg.get("x");
 				int y = (Integer)msg.get("y");
-				/* Copy the id of the message so that the unit knows 
-				 * what message the battlefield responded to. 
-				 */
 				reply.put("id", msg.get("id"));
-				// Get the unit at the specific location
 				reply.put("unit", getUnit(x, y));
 				break;
 			}
@@ -193,15 +196,16 @@ public class GameServer implements MessagingHandler {
 				reply = new Message();
 				int x = (Integer)msg.get("x");
 				int y = (Integer)msg.get("y");
-				/* Copy the id of the message so that the unit knows 
-				 * what message the battlefield responded to. 
-				 */
 				reply.put("id", msg.get("id"));
-				if (getUnit(x, y) instanceof Player)
-					reply.put("type", UnitType.player);
-				else if (getUnit(x, y) instanceof Dragon)
-					reply.put("type", UnitType.dragon);
-				else reply.put("type", UnitType.undefined);
+				
+				if(getUnit(x, y) != null) {
+					UnitType unitType = getUnit(x, y).unitType;
+					if (unitType == UnitType.Player)
+						reply.put("type", UnitType.Player);
+					else if (unitType == UnitType.Dragon)
+						reply.put("type", UnitType.Dragon);
+				}
+				else reply.put("type", UnitType.Undefined);
 				break;
 			}
 			case dealDamage:
@@ -210,10 +214,20 @@ public class GameServer implements MessagingHandler {
 				int y = (Integer)msg.get("y");
 				unit = this.getUnit(x, y);
 				if (unit != null)
-					unit.adjustHitPoints( -(Integer)msg.get("damage") );
-				/* Copy the id of the message so that the unit knows 
-				 * what message the battlefield responded to. 
-				 */
+					unit.adjustHitPoints(-(Integer)msg.get("damagePoints") );
+				
+				//tell the player's request handling server (origin) that it's player's health has changed
+				reply = new Message();
+				reply.put("id", msg.get("id"));
+				reply.put("unit", unit);
+				
+				
+				//tell all other request handling servers (servers != origin) that a player's health has changed
+				sync = new Message();
+				sync.put("id", getNewSyncMessageId());
+				sync.put("request", MessageType.sync);
+				sync.put("type", MessageType.dealDamage);
+				sync.put("unit", unit);	
 				break;
 			}
 			case healDamage:
@@ -222,42 +236,72 @@ public class GameServer implements MessagingHandler {
 				int y = (Integer)msg.get("y");
 				unit = this.getUnit(x, y);
 				if (unit != null)
-					unit.adjustHitPoints( (Integer)msg.get("healed") );
-				/* Copy the id of the message so that the unit knows 
-				 * what message the battlefield responded to. 
-				 */
+					unit.adjustHitPoints((Integer)msg.get("healedPoints") );
+				
+				//tell the player's request handling server (origin) that it's player's health has changed
+				reply = new Message();
+				reply.put("id", msg.get("id"));
+				reply.put("unit", unit);
+				
+				//tell all other request handling servers (servers != origin) that a player's health has changed
+				sync = new Message();
+				sync.put("id", getNewSyncMessageId());
+				sync.put("request", MessageType.sync);
+				sync.put("type", MessageType.healDamage);
+				sync.put("unitHealer", unit);
+				
 				break;
 			}
 			case moveUnit:
 				reply = new Message();
-				this.moveUnit((Unit)msg.get("unit"), (Integer)msg.get("x"), (Integer)msg.get("y"));
-				/* Copy the id of the message so that the unit knows 
-				 * what message the battlefield responded to. 
-				 */
+				boolean moveSuccess; 
+				unit = this.moveUnit((Integer)msg.get("originalX"),(Integer)msg.get("originalY"), (Integer)msg.get("x"), (Integer)msg.get("y"));
+				if(unit.x == (Integer)msg.get("originalX") && unit.y == (Integer)msg.get("originalY"))
+					moveSuccess = true;
+				else
+					moveSuccess = false;
+				
+				//tell the player's request handling server (origin) that it's player's move request has been processed 
 				reply.put("id", msg.get("id"));
+				reply.put("moveSuccess", moveSuccess);
+				reply.put("unit", unit);
+				
+				//tell all other request handling servers (servers != origin) that a player has moved if the move was successful
+				if(moveSuccess) {
+					sync = new Message();
+					sync.put("id", getNewSyncMessageId());
+					sync.put("request", MessageType.sync);
+					sync.put("type", MessageType.moveUnit);
+					sync.put("originalUnit", unit);
+				}
 				break;
 			case removeUnit:
 				this.removeUnit((Integer)msg.get("x"), (Integer)msg.get("y"));
-				return;
+				reply = new Message();
+				
+				//tell the player's request handling server (origin) that it's player's has been removed 
+				reply.put("id", msg.get("id"));
+				
+				//tell all other request handling servers (servers != origin) that a player has been removed
+				sync = new Message();
+				sync.put("id", getNewSyncMessageId());
+				sync.put("request", MessageType.sync);
+				sync.put("type", MessageType.removeUnit);
+				sync.put("removeX", (Integer)msg.get("x"));
+				sync.put("removeY", (Integer)msg.get("y"));
+				
+				break;
+		default:
+			break;
 		}
-		if (reply != null)
-			sendMessage(reply, origin);
-	}
-	/**
-	 * Close down the battlefield. Unregisters
-	 * the serverSocket so the program can 
-	 * actually end.
-	 */ 
-	public synchronized void shutdown() {
-		// Remove all units from the battlefield and make them disconnect from the server
-		for (Unit unit : units) {
-			unit.disconnect();
-			unit.stopRunnerThread();
+		if(sync != null) {
+			for(String key : requestHandlingServers.keySet()) {
+				if(key != origin) {
+					requestHandlingServers.get(key).onSynchronizationMessageReceived(sync);
+				}
+			}
 		}
-	}
-	
-	private void sendMessage(Message reply, String origin) {
-		
+		return reply;
 	}
 	
 	public static void main(String args[]) throws NotBoundException {
@@ -265,7 +309,7 @@ public class GameServer implements MessagingHandler {
 		int numberOfReqHandlers = 2;
 		try {
 			LocateRegistry.createRegistry(port);
-			String name = "GameServer";
+			String name = "gameServer";
             MessagingHandler gameServer = new GameServer();
             MessagingHandler gameServerStub = (MessagingHandler) UnicastRemoteObject.exportObject(gameServer, 0);
             Registry registry = LocateRegistry.getRegistry();
@@ -273,7 +317,7 @@ public class GameServer implements MessagingHandler {
             
             for(int i=0;i<numberOfReqHandlers;i++) {
             	
-            	String s = "ReqServer"+(i+1);
+            	String s = "reqServer"+(i+1);
             	Registry remoteRegistry  = LocateRegistry.getRegistry(args[0], port);
     			MessagingHandler reqServerHandle = (MessagingHandler) remoteRegistry.lookup(s);
     			requestHandlingServers.put(s, reqServerHandle);
@@ -282,14 +326,25 @@ public class GameServer implements MessagingHandler {
             battlefield = GameServer.getBattleField();
             
             //initialize dragons
-            initializeDragons();
+            initializeDragons(2);
             
             //initialize players
-            initializePlayers(6);
-            
-            
+            initializePlayers(6, 2);            
             
             //send this info to respective servers
+            requestHandlingServers.forEach((serverName, handler) -> {
+				try {
+					Message setupMessage = new Message();
+					setupMessage.put("id", 0);
+					setupMessage.put("players", setupPlayers.get(serverName));
+					setupMessage.put("dragons", setupDragons.get(serverName));
+					setupMessage.put("type", MessageType.setup);
+					handler.onMessageReceived(setupMessage);
+				} catch (RemoteException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+			});
             
             
 		} catch (RemoteException e) {
@@ -298,17 +353,9 @@ public class GameServer implements MessagingHandler {
 		}
 	}
 
-	private static void initializeDragons() {
-		// TODO Auto-generated method stub
-		
-	}
-
-	private static void initializePlayers(int playerCount) {
-		/* Initialize a random number of players (between [MIN_PLAYER_COUNT..MAX_PLAYER_COUNT] */
-		//int playerCount = (int)((MAX_PLAYER_COUNT - MIN_PLAYER_COUNT) * Math.random() + MIN_PLAYER_COUNT);
-		for(int i = 0; i < playerCount; i++)
+	private static void initializePlayers(int playerCount, int dragonCount) {
+		for(int id = dragonCount; id < playerCount; id++)
 		{
-			/* Once again, pick a random spot */
 			int x, y, attempt = 0;
 			do {
 				x = (int)(Math.random() * MAP_WIDTH);
@@ -319,29 +366,41 @@ public class GameServer implements MessagingHandler {
 			// We were successful
 			if (attempt < 10)
 			{
-				int m = i % numberOfReqServers; 
-				addUnitIds(i, "reqServer"+(m+1));					
+				int m = id % numberOfReqServers; 
+				String serverName = "reqServer"+(m+1);
+				UnitState u = new UnitState(x, y, id+1, UnitType.Player, serverName);
+				if(!setupPlayers.containsKey(serverName)) {
+					setupPlayers.put(serverName, new ArrayList<UnitState>());
+				}
+				setupPlayers.get(serverName).add(u);
 			}		
 		}
-		for(int i=0;i<numberOfReqServers;i++) {
-			Message setupMsg = new Message();
-			setupMsg.put("id", 0);
-			setupMsg.put("setup", setup.get("reqServer"+(i+1)));
-			setupMsg.setMessageType(MessageRequest.setup);
-			try {
-				requestHandlingServers.get("reqServer"+(i+1)).onMessageReceived(setupMsg);
-			} catch (RemoteException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
+	}
+	
+	private static void initializeDragons(int dragonCount) {
+		for(int id = 0; id < dragonCount; id++)
+		{
+			int x, y;
+			do {
+				x = (int)(Math.random() * MAP_WIDTH);
+				y = (int)(Math.random() * MAP_HEIGHT);
+			} while (battlefield.getUnit(x, y) != null);
+
+			// We were successful in finding a spot at x, y
+			
+			int m = id % numberOfReqServers; 
+			String serverName = "reqServer"+(m+1);
+			UnitState u = new UnitState(x, y, id+1, UnitType.Dragon, serverName);
+			if(!setupDragons.containsKey(serverName)) {
+				setupDragons.put(serverName, new ArrayList<UnitState>());
 			}
+			setupDragons.get(serverName).add(u);	
 		}
 	}
 
-	private static void addUnitIds(int i, String serverName) {
-		Unit u = new Unit()
-		if(!setup.containsKey(serverName)) {
-			setup.put(serverName, new ArrayList<>());
-		}
-		setup.get(serverName).add(i);
+	@Override
+	public void onSynchronizationMessageReceived(Message message) throws RemoteException {
+		// TODO Auto-generated method stub
+		
 	}
 }
