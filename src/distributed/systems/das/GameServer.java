@@ -12,6 +12,7 @@ import distributed.systems.das.common.Message;
 import distributed.systems.das.common.MessageType;
 import distributed.systems.das.common.UnitState;
 import distributed.systems.das.common.UnitType;
+import distributed.systems.das.services.LoggingService;
 import distributed.systems.das.services.MessagingHandler;
 
 public class GameServer implements MessagingHandler {
@@ -161,6 +162,8 @@ public class GameServer implements MessagingHandler {
 	
 	@Override
 	public Message onMessageReceived(Message msg) throws RemoteException {
+		String text = "onMessageReceived: "+msg.get("id");
+		LoggingService.log(msg.getMessageType(), text);
 		Message reply = null;
 		Message sync = null;
 		String origin = (String)msg.get("origin");
@@ -295,6 +298,7 @@ public class GameServer implements MessagingHandler {
 		if(sync != null) {
 			for(String key : requestHandlingServers.keySet()) {
 				if(!key.equals(origin)) {
+					LoggingService.log(MessageType.setup, "send sync to: "+key);
 					requestHandlingServers.get(key).onSynchronizationMessageReceived(sync);
 				}
 			}
@@ -314,7 +318,7 @@ public class GameServer implements MessagingHandler {
             MessagingHandler gameServerStub = (MessagingHandler) UnicastRemoteObject.exportObject(gameServer, 0);
             Registry registry = LocateRegistry.getRegistry();
             registry.rebind(name, gameServerStub);
-            
+            LoggingService.log(MessageType.setup, "game server registry created.");
             for(int i=0;i<numberOfReqHandlers;i++) {
             	
             	String s = "reqServer"+(i+1);
@@ -339,6 +343,7 @@ public class GameServer implements MessagingHandler {
 					setupMessage.put("players", setupPlayers.get(serverName));
 					setupMessage.put("dragons", setupDragons.get(serverName));
 					setupMessage.put("type", MessageType.setup);
+					LoggingService.log(MessageType.setup, "send player and dragon setup message.");
 					handler.onMessageReceived(setupMessage);
 				} catch (RemoteException e) {
 					// TODO Auto-generated catch block

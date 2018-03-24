@@ -12,6 +12,8 @@ import java.util.ArrayList;
 import distributed.systems.das.common.Message;
 import distributed.systems.das.common.MessageType;
 import distributed.systems.das.common.UnitState;
+import distributed.systems.das.services.HeartbeatService;
+import distributed.systems.das.services.LoggingService;
 import distributed.systems.das.services.MessagingHandler;
 import distributed.systems.das.units.Dragon;
 import distributed.systems.das.units.Player;
@@ -26,11 +28,12 @@ public class RequestHandlingServer implements MessagingHandler {
 	private static String GameServerIp = "localhost";
 	private static int port = 1099; //we use default RMI Registry port
 	private static MessagingHandler gameServerHandle;
-	
+	private Thread heartbeatThread;
 	
 	private RequestHandlingServer(int width, int height){
 		MAP_WIDTH = width;
 		MAP_HEIGHT = height;
+		heartbeatThread = new Thread()
 	}
 	public static RequestHandlingServer getRequestHandlingServer(){
 		if(battlefield == null) {
@@ -52,12 +55,15 @@ public class RequestHandlingServer implements MessagingHandler {
 	public synchronized void moveUnit(UnitState unit, int toX, int toY) {
 		Message moveMessage = new Message();
 		int id = ++localMessageCounter;
+		moveMessage.setMessageType(MessageType.moveUnit);
 		moveMessage.put("request", MessageType.moveUnit);
 		moveMessage.put("toX", toX);
 		moveMessage.put("toY", toY);
 		moveMessage.put("id", id);
 		moveMessage.put("unit", unit);
 		moveMessage.put("origin", unit.helperServerAddress);
+		String text = "Move unit X: "+ unit.x + " Y: "+ unit.y + " unitID: "+unit.unitID+ "to X:"+toX+" Y: "+toY;
+		LoggingService.log(MessageType.moveUnit, text);
 		try {
 			Message reply = gameServerHandle.onMessageReceived(moveMessage);
 			if((boolean)reply.get("moveSuccess")) {
@@ -75,12 +81,15 @@ public class RequestHandlingServer implements MessagingHandler {
 		synchronized (this) {
 			id = ++localMessageCounter;
 			healMessage = new Message();
+			healMessage.setMessageType(MessageType.healDamage);
 			healMessage.put("request", MessageType.healDamage);
 			healMessage.put("toX", toX);
 			healMessage.put("toY", toY);
 			healMessage.put("healedPoints", unit.attackPoints);
 			healMessage.put("id", id);
 			healMessage.put("origin", unit.helperServerAddress);
+			String text = "Heal from unit X: "+ unit.x + " Y: "+ unit.y + " unitID: "+unit.unitID+ "to X:"+toX+" Y: "+toY;
+			LoggingService.log(MessageType.healDamage, text);
 			try {
 				Message reply = gameServerHandle.onMessageReceived(healMessage);
 				UnitState healedUnit = (UnitState) reply.get("unit");
@@ -97,12 +106,15 @@ public class RequestHandlingServer implements MessagingHandler {
 		synchronized(this) {
 			id = ++localMessageCounter;
 			dealMessage = new Message();
+			dealMessage.setMessageType(MessageType.dealDamage);
 			dealMessage.put("request", MessageType.dealDamage);
 			dealMessage.put("toX", toX);
 			dealMessage.put("toY", toY);
 			dealMessage.put("damagePoints", unit.attackPoints);
 			dealMessage.put("id", id);
 			dealMessage.put("origin", unit.helperServerAddress);
+			String text = "Deal unit X: "+ unit.x + " Y: "+ unit.y + " unitID: "+unit.unitID+ "to X:"+toX+" Y: "+toY;
+			LoggingService.log(MessageType.dealDamage, text);
 			try {
 				Message reply = gameServerHandle.onMessageReceived(dealMessage);
 				UnitState damagedUnit = (UnitState) reply.get("unit");
@@ -240,5 +252,4 @@ public class RequestHandlingServer implements MessagingHandler {
 		}
 		
 	}
-
 }
