@@ -31,10 +31,11 @@ public class Player implements Runnable, Serializable{
 	private static final long serialVersionUID = -3507657523648823999L;
 	
 	public Player(UnitState unit) {
+		this.unit = unit;
 		/* Create a random delay */
 		timeBetweenTurns = (int)(Math.random() * (MAX_TIME_BETWEEN_TURNS - MIN_TIME_BETWEEN_TURNS)) + MIN_TIME_BETWEEN_TURNS;
 		battlefield = RequestHandlingServer.getRequestHandlingServer();
-		runnerThread = new Thread(this, unit.unitType + Integer.toString(unit.unitID));
+		runnerThread = new Thread(this);
 		runnerThread.start();
 	}
 
@@ -96,7 +97,10 @@ public class Player implements Runnable, Serializable{
 				}
 
 				// Get what unit lies in the target square
-				adjacentUnitType = battlefield.getUnit(targetX, targetY).unitType;
+				UnitState us = battlefield.getUnit(targetX, targetY);
+				if(us!= null) {
+					adjacentUnitType = us.unitType;
+				}
 				switch (adjacentUnitType) {
 					case Undefined:
 						// There is no unit in the square. Move the player to this square

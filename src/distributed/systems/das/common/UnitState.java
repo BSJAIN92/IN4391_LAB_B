@@ -1,7 +1,10 @@
 package distributed.systems.das.common;
 
-public class UnitState{
+import java.io.Serializable;
+
+public class UnitState implements Serializable{
 	
+	private static final long serialVersionUID = -2501468001030794321L;
 	public final int MIN_HITPOINTS = 20;
 	public final int MAX_HITPOINTS = 10;
 	public final int MIN_ATTACKPOINTS = 1;
@@ -21,7 +24,11 @@ public class UnitState{
 	public UnitType unitType;
 	
 	//Name of the helper server a unit is associated with
-	String helperServerAddress;	
+	public String helperServerAddress;	
+	
+	public UnitState() {
+		
+	}
 	
 	public UnitState(int x, int y, int unitId, UnitType unitType, String helperServerAddress)
 	{

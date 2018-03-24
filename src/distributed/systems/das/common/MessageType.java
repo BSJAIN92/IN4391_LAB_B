@@ -1,5 +1,7 @@
 package distributed.systems.das.common;
 
+import java.io.Serializable;
+
 /**
  * Different request types for the
  * nodes to send to the server.

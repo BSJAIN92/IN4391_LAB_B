@@ -25,11 +25,10 @@ public class Dragon implements Runnable{
 	 * reaction speed 
 	 */
 	public Dragon(UnitState unit) {
+		this.unit = unit;
 		/* Create a random delay */
 		timeBetweenTurns = (int)(Math.random() * (MAX_TIME_BETWEEN_TURNS - MIN_TIME_BETWEEN_TURNS)) + MIN_TIME_BETWEEN_TURNS;
 		battlefield = RequestHandlingServer.getRequestHandlingServer();
-		/* Awaken the dragon */
-		//new Thread(this).start();
 		runnerThread = new Thread(this);
 		runnerThread.start();
 	}
@@ -54,19 +53,26 @@ public class Dragon implements Runnable{
 					break;
 
 				// Decide what players are near
-				if (unit.y > 0)
-					if ( battlefield.getUnit( unit.x, unit.y - 1 ).unitType == UnitType.Player )
+				if (unit.y > 0) {
+					UnitState us = battlefield.getUnit( unit.x, unit.y - 1 );
+					if (us  != null && us.unitType == UnitType.Player )
 						adjacentPlayers.add(Direction.up);
-				if (unit.y < GameServer.MAP_WIDTH - 1)
-					if ( battlefield.getUnit( unit.x, unit.y + 1 ).unitType == UnitType.Player )
+				}	
+				if (unit.y < GameServer.MAP_WIDTH - 1) {
+					UnitState us = battlefield.getUnit( unit.x, unit.y + 1 );
+					if(us!=null && us.unitType == UnitType.Player )
 						adjacentPlayers.add(Direction.down);
-				if (unit.x > 0)
-					if ( battlefield.getUnit( unit.x - 1, unit.y ).unitType == UnitType.Player )
+				}		
+				if (unit.x > 0) {
+					UnitState us = battlefield.getUnit( unit.x - 1, unit.y);
+					if(us!=null && us.unitType == UnitType.Player )
 						adjacentPlayers.add(Direction.left);
-				if (unit.x < GameServer.MAP_WIDTH - 1)
-					if ( battlefield.getUnit( unit.x + 1, unit.y ).unitType == UnitType.Player )
+				}
+				if (unit.x < GameServer.MAP_WIDTH - 1) {
+					UnitState us = battlefield.getUnit( unit.x + 1, unit.y);
+					if(us!=null && us.unitType == UnitType.Player )
 						adjacentPlayers.add(Direction.right);
-				
+				}
 				// Pick a random player to attack
 				if (adjacentPlayers.size() == 0)
 					continue; // There are no players to attack

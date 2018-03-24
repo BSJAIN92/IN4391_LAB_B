@@ -22,7 +22,7 @@ public class GameServer implements MessagingHandler {
 	private int syncMessageId = 0;
 	
 	private static GameServer battlefield;
-	private static int numberOfReqServers = 3;
+	private static int numberOfReqServers = 1;
 	public final static int MAP_WIDTH = 25;
 	public final static int MAP_HEIGHT = 25;  
 	private static HashMap<String, MessagingHandler> requestHandlingServers = new HashMap<String, MessagingHandler>();
@@ -35,7 +35,7 @@ public class GameServer implements MessagingHandler {
 	
 	public static GameServer getBattleField() {
 		if(battlefield == null) {
-			new GameServer();
+			battlefield = new GameServer();
 		}
 		return battlefield;
 	}
@@ -118,7 +118,7 @@ public class GameServer implements MessagingHandler {
 			return false;
 
 		map[x][y] = unit;
-		unit.setPosition(x, y);
+		//unit.setPosition(x, y);
 		return true;
 	}
 	
@@ -131,18 +131,17 @@ public class GameServer implements MessagingHandler {
 	 * 
 	 * @return true on success.
 	 */
-	private synchronized UnitState moveUnit(int originalX, int originalY, int newX, int newY)
+	private synchronized UnitState moveUnit(UnitState unit, int newX, int newY)
 	{
-		UnitState unit = getUnit(originalX, originalY);
 		if (newX >= 0 && newX < MAP_WIDTH)
 			if (newY >= 0 && newY < MAP_HEIGHT)
 				if (map[newX][newY] == null) {
-					if (putUnit(unit, newX, newY)) {
-						removeUnit(originalX, originalY);
-						return map[newX][newY];
-					}
+					UnitState newUnit = new UnitState(newX, newY, unit.unitID, unit.unitType, unit.helperServerAddress);
+					map[newX][newY] =  newUnit;
+					removeUnit(unit.x, unit.y);
+					return map[newX][newY];
 				}
-		return map[originalX][originalY];
+		return null;
 	}
 
 	/**
@@ -210,8 +209,8 @@ public class GameServer implements MessagingHandler {
 			}
 			case dealDamage:
 			{
-				int x = (Integer)msg.get("x");
-				int y = (Integer)msg.get("y");
+				int x = (Integer)msg.get("toX");
+				int y = (Integer)msg.get("toY");
 				unit = this.getUnit(x, y);
 				if (unit != null)
 					unit.adjustHitPoints(-(Integer)msg.get("damagePoints") );
@@ -232,8 +231,8 @@ public class GameServer implements MessagingHandler {
 			}
 			case healDamage:
 			{
-				int x = (Integer)msg.get("x");
-				int y = (Integer)msg.get("y");
+				int x = (Integer)msg.get("toX");
+				int y = (Integer)msg.get("toY");
 				unit = this.getUnit(x, y);
 				if (unit != null)
 					unit.adjustHitPoints((Integer)msg.get("healedPoints") );
@@ -255,11 +254,9 @@ public class GameServer implements MessagingHandler {
 			case moveUnit:
 				reply = new Message();
 				boolean moveSuccess; 
-				unit = this.moveUnit((Integer)msg.get("originalX"),(Integer)msg.get("originalY"), (Integer)msg.get("x"), (Integer)msg.get("y"));
-				if(unit.x == (Integer)msg.get("originalX") && unit.y == (Integer)msg.get("originalY"))
-					moveSuccess = true;
-				else
-					moveSuccess = false;
+				UnitState msgUnit = (UnitState)msg.get("unit");
+				unit = this.moveUnit(msgUnit, (Integer)msg.get("toX"), (Integer)msg.get("toY"));
+				moveSuccess = unit != null ? true : false;
 				
 				//tell the player's request handling server (origin) that it's player's move request has been processed 
 				reply.put("id", msg.get("id"));
@@ -272,7 +269,8 @@ public class GameServer implements MessagingHandler {
 					sync.put("id", getNewSyncMessageId());
 					sync.put("request", MessageType.sync);
 					sync.put("type", MessageType.moveUnit);
-					sync.put("originalUnit", unit);
+					sync.put("oldUnit", msgUnit);
+					sync.put("newUnit", unit);
 				}
 				break;
 			case removeUnit:
@@ -296,7 +294,7 @@ public class GameServer implements MessagingHandler {
 		}
 		if(sync != null) {
 			for(String key : requestHandlingServers.keySet()) {
-				if(key != origin) {
+				if(!key.equals(origin)) {
 					requestHandlingServers.get(key).onSynchronizationMessageReceived(sync);
 				}
 			}
@@ -305,10 +303,12 @@ public class GameServer implements MessagingHandler {
 	}
 	
 	public static void main(String args[]) throws NotBoundException {
+		//String ip = args[0];
+		String ip = "localhost";
 		int port = 1099;
-		int numberOfReqHandlers = 2;
+		int numberOfReqHandlers = 1;
 		try {
-			LocateRegistry.createRegistry(port);
+			//LocateRegistry.createRegistry(port);
 			String name = "gameServer";
             MessagingHandler gameServer = new GameServer();
             MessagingHandler gameServerStub = (MessagingHandler) UnicastRemoteObject.exportObject(gameServer, 0);
@@ -318,7 +318,7 @@ public class GameServer implements MessagingHandler {
             for(int i=0;i<numberOfReqHandlers;i++) {
             	
             	String s = "reqServer"+(i+1);
-            	Registry remoteRegistry  = LocateRegistry.getRegistry(args[0], port);
+            	Registry remoteRegistry  = LocateRegistry.getRegistry(ip, port);
     			MessagingHandler reqServerHandle = (MessagingHandler) remoteRegistry.lookup(s);
     			requestHandlingServers.put(s, reqServerHandle);
             }
