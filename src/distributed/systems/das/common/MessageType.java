@@ -9,5 +9,5 @@ import java.io.Serializable;
  * @author Pieter Anemaet, Boaz Pat-El
  */
 public enum MessageType {
-	spawnUnit, getUnit, moveUnit, putUnit, removeUnit, getType, dealDamage, healDamage, setup, sync, heartbeat
+	spawnUnit, getUnit, moveUnit, putUnit, removeUnit, getType, dealDamage, healDamage, setup, sync, heartbeat, changeServer
 }

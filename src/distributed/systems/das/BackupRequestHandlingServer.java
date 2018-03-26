@@ -22,6 +22,7 @@ import java.util.HashMap;
 import distributed.systems.das.common.Message;
 import distributed.systems.das.common.MessageType;
 import distributed.systems.das.common.UnitState;
+import distributed.systems.das.common.UnitType;
 import distributed.systems.das.services.HeartbeatService;
 import distributed.systems.das.services.LoggingService;
 import distributed.systems.das.services.MessagingHandler;
@@ -29,13 +30,13 @@ import distributed.systems.das.services.RequestServerFailoverService;
 import distributed.systems.das.units.Dragon;
 import distributed.systems.das.units.Player;
 
-public class RequestHandlingServer implements MessagingHandler {
+public class BackupRequestHandlingServer implements MessagingHandler {
 	public int MAP_WIDTH;
 	public int MAP_HEIGHT;
 	public UnitState[][] map;
 	private int localMessageCounter = 0;
 
-	private static RequestHandlingServer battlefield;
+	private static BackupRequestHandlingServer battlefield;
 	private static String gameServerIp = "localhost";
 	private static String backupServerIp = "localhost";
 	private static String myServerName = "localhost";
@@ -45,12 +46,15 @@ public class RequestHandlingServer implements MessagingHandler {
 	private static HeartbeatService heartbeat;
 	private static RequestServerFailoverService reqFailoverService;
 	private HashMap<String, String> serverIps;
-	public static HashMap<String, Long> timeSinceHeartbeat;
+	private static HashMap<String, Long> timeSinceHeartbeat;
 	
+	private static HashMap<String, ArrayList<UnitState>> setupDragons;
+	private static HashMap<String, ArrayList<UnitState>> setupPlayers;
 	
-	private RequestHandlingServer(int width, int height){
+	private BackupRequestHandlingServer(int width, int height){
 		MAP_WIDTH = width;
 		MAP_HEIGHT = height;
+		setTimeSinceHeartbeat(new HashMap<String, Long>());
 		//read all IP addresses from config file and add them to hashmap
 		//createIpMap();	
 	}
@@ -70,9 +74,9 @@ public class RequestHandlingServer implements MessagingHandler {
 			e.printStackTrace();
 		}
 	}
-	public static RequestHandlingServer getRequestHandlingServer(){
+	public static BackupRequestHandlingServer getRequestHandlingServer(){
 		if(battlefield == null) {
-			battlefield = new RequestHandlingServer(25, 25);
+			battlefield = new BackupRequestHandlingServer(25, 25);
 			battlefield.map = new UnitState[25][25];
 		}
 		return battlefield;
@@ -182,6 +186,49 @@ public class RequestHandlingServer implements MessagingHandler {
 		}
 	}
 	
+	public synchronized void processServerFailure(String serverName) {
+		//spawn players and dragons in backup server
+		ArrayList<Integer> ids = new ArrayList<Integer>();
+		ArrayList<UnitState> units = null;
+		for(UnitState u : setupDragons.get(serverName)) {
+			ids.add(u.unitID);
+		}
+		for(UnitState u : setupPlayers.get(serverName)) {
+			ids.add(u.unitID);
+		}
+		units = getUnitsFromUnitIds(ids);
+		for(UnitState u: units) {
+			if(u.unitType == UnitType.Dragon){
+				Dragon d = new Dragon(u);
+			}
+			else {
+				Player p = new Player(u);
+			}			
+		}			
+		//send information of failure to main game server and backup game server
+		Message msg = new Message();
+		msg.put("serverName", serverName);
+		msg.put("request", MessageType.changeServer);
+		msg.setMessageType(MessageType.changeServer);		
+		try {
+			gameServerHandle.onMessageReceived(msg);
+		} catch (RemoteException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+	}
+	
+	private synchronized ArrayList<UnitState> getUnitsFromUnitIds(ArrayList<Integer> ids) {
+		ArrayList<UnitState> unitsToSpawn = new ArrayList<UnitState>();
+		for(int i=0;i<MAP_WIDTH;i++) {
+			for(int j=0;j<MAP_HEIGHT;j++) {
+				if(map[i][j] != null && ids.contains(map[i][j].unitID)) {
+					unitsToSpawn.add(map[i][j]);
+				}
+			}
+		}
+		return unitsToSpawn;
+	}
 	private void placeUnitOnMap(UnitState u) {
 		try {
 			battlefield.map[u.x][u.y] = u;
@@ -205,9 +252,6 @@ public class RequestHandlingServer implements MessagingHandler {
 			reqHandlingServerStub = (MessagingHandler) UnicastRemoteObject.exportObject(reqHandlingServer, 0);
 			Registry registry = LocateRegistry.getRegistry();
 	        registry.rebind(myServerName, reqHandlingServerStub);
-	        Registry backupRegistry = LocateRegistry.getRegistry(backupServerIp);
-	        backupReqServerHandle = (MessagingHandler) backupRegistry.lookup("backupServerReq");
-	        heartbeat = new HeartbeatService(backupReqServerHandle, myServerName);
 		} catch (RemoteException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
@@ -220,30 +264,40 @@ public class RequestHandlingServer implements MessagingHandler {
 			try {
 				Registry remoteRegistry  = LocateRegistry.getRegistry(gameServerIp, port);
 				gameServerHandle= (MessagingHandler) remoteRegistry.lookup("gameServer");
+				if(reqFailoverService == null) {
+					reqFailoverService = new RequestServerFailoverService(this);
+				}
 			} catch (RemoteException e) {
 				e.printStackTrace();
 			} catch (NotBoundException e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
-			}		
-			HashMap<String, ArrayList<UnitState>> setupDragons = (HashMap<String, ArrayList<UnitState>>) message.get("dragons");
+			}
+			setupDragons = (HashMap<String, ArrayList<UnitState>>) message.get("dragons");
+			//k: serverName v: arraylist of dragon units
 			setupDragons.forEach((k,v)->{
-				v.forEach(u->{
-					placeUnitOnMap(u);
-					if(u.helperServerAddress.equals(myServerName)) {
-						Dragon d = new Dragon(u);
-					}
-				});
+				v.forEach(u -> placeUnitOnMap(u));
 			});
-			HashMap<String, ArrayList<UnitState>> setupPlayers = (HashMap<String, ArrayList<UnitState>>) message.get("players");
+			setupPlayers = (HashMap<String, ArrayList<UnitState>>) message.get("players");
 			setupPlayers.forEach((k,v)->{
-				v.forEach(u->{
-					placeUnitOnMap(u);
-					if(u.helperServerAddress.equals(myServerName)) {
-						Player d = new Player(u);
-					}
-				});
+				v.forEach(u -> placeUnitOnMap(u));
 			});
+		}
+		if(message.get("type").equals(MessageType.changeServer)) {
+			//get the name of the backup server
+			String backupServerName = message.get("serverName").toString();
+			String backupServerIpAddress = message.get("ipAddress").toString();
+			
+			//change RMI to call backup server method
+			try {
+				MessagingHandler backupGameServerHandle = 
+				(MessagingHandler) LocateRegistry.getRegistry(backupServerIpAddress).lookup(backupServerName);
+				synchronized(this) {
+					gameServerHandle = backupGameServerHandle;
+				}
+			} catch (NotBoundException e) {
+				e.printStackTrace();
+			} 
 		}
 		return null;
 	}
@@ -306,15 +360,20 @@ public class RequestHandlingServer implements MessagingHandler {
 		String name = msg.get("serverName").toString();
 		String text = "Received heartbeat from " +  name;
 		LoggingService.log(MessageType.heartbeat, text);
-		Date now = null;
-		if(!timeSinceHeartbeat.containsKey(name)) {
-			timeSinceHeartbeat.put(name, System.currentTimeMillis());
+		if(!getTimeSinceHeartbeat().containsKey(name)) {
+			getTimeSinceHeartbeat().put(name, System.currentTimeMillis());
 		}
 		else {
-			timeSinceHeartbeat.put(name, System.currentTimeMillis());
+			getTimeSinceHeartbeat().put(name, System.currentTimeMillis());
 		}
 		reply = new Message();
 		reply.put("serverName", myServerName);
 		return reply;
+	}
+	public HashMap<String, Long> getTimeSinceHeartbeat() {
+		return timeSinceHeartbeat;
+	}
+	public static void setTimeSinceHeartbeat(HashMap<String, Long> timeSinceHeartbeat) {
+		BackupRequestHandlingServer.timeSinceHeartbeat = timeSinceHeartbeat;
 	}
 }

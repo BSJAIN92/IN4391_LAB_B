@@ -22,8 +22,7 @@ public class HeartbeatService implements Runnable {
 		runnerThread.start();
 	}
 	public void run() {
-		//periodically send heartbeat message to designated server
-			
+		//periodically send heartbeat message to designated server	
 		try {
 			/* sleep for 3 seconds */
 			Thread.currentThread().sleep(frequency);

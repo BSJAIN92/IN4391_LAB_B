@@ -19,8 +19,8 @@ public class GameServer implements MessagingHandler {
 
 	//updates to the following members must be synchronized. At any give time only one thread can update these values.
 	private UnitState[][] map;
-	private int lastUnitId = 0;
-	private int syncMessageId = 0;
+	private static int lastUnitId = 0;
+	private static int syncMessageId = 0;
 	
 	private static GameServer battlefield;
 	private static int numberOfReqServers;
@@ -45,14 +45,14 @@ public class GameServer implements MessagingHandler {
 	 * Returns a new unique unit ID.
 	 * @return int: a new unique unit ID.
 	 */
-	public synchronized int getNewUnitID() {
+	public synchronized static int getNewUnitId() {
 		return ++lastUnitId;
 	}
 	/**
 	 * Returns a new unique unit ID.
 	 * @return int: a new unique unit ID.
 	 */
-	public synchronized int getNewSyncMessageId() {
+	public synchronized static int getNewSyncMessageId() {
 		return ++syncMessageId;
 	}
 	
@@ -77,7 +77,7 @@ public class GameServer implements MessagingHandler {
 		//As the GameServer is a singleton, all threads operate on the sole instance of the class. 
 		synchronized (this) {
 			if (map[x][y] == null) {
-				unit = new UnitState(x, y, getNewUnitID(), unitType, origin);
+				unit = new UnitState(x, y, getNewUnitId(), unitType, origin);
 				map[x][y] = unit;
 				map[x][y].setPosition(x, y);
 			}
@@ -292,6 +292,14 @@ public class GameServer implements MessagingHandler {
 				sync.put("removeY", (Integer)msg.get("y"));
 				
 				break;
+			case changeServer:
+				// get new req handling server name, ip addr from the message
+				String removeServerName = msg.get("serverName").toString();
+				
+				//chande rmi handler
+				requestHandlingServers.remove(removeServerName);
+				break;
+				
 		default:
 			break;
 		}
@@ -324,13 +332,19 @@ public class GameServer implements MessagingHandler {
             Registry registry = LocateRegistry.getRegistry();
             registry.rebind(name, gameServerStub);
             LoggingService.log(MessageType.setup, "game server registry created.");
-            for(int i=0;i<numberOfReqServers;i++) {
-            	
+            
+            //req handlers
+            for(int i=0;i<numberOfReqServers;i++) {	
             	String s = "reqServer"+(i+1);
             	Registry remoteRegistry  = LocateRegistry.getRegistry(ip, port);
     			MessagingHandler reqServerHandle = (MessagingHandler) remoteRegistry.lookup(s);
     			requestHandlingServers.put(s, reqServerHandle);
             }
+            
+            //backup req handler
+            Registry remoteRegistry  = LocateRegistry.getRegistry(ip, port);
+            requestHandlingServers.put("backupServerReq", (MessagingHandler) remoteRegistry.lookup("backupServerReq"));
+            
             //initialize battlefield
             battlefield = GameServer.getBattleField();            
             
@@ -378,7 +392,7 @@ public class GameServer implements MessagingHandler {
 			{
 				int m = id % numberOfReqServers; 
 				String serverName = "reqServer"+(m+1);
-				UnitState u = new UnitState(x, y, id+1, UnitType.Player, serverName);
+				UnitState u = new UnitState(x, y, getNewUnitId(), UnitType.Player, serverName);
 				if(!setupPlayers.containsKey(serverName)) {
 					setupPlayers.put(serverName, new ArrayList<UnitState>());
 				}
@@ -400,7 +414,7 @@ public class GameServer implements MessagingHandler {
 			
 			int m = id % numberOfReqServers; 
 			String serverName = "reqServer"+(m+1);
-			UnitState u = new UnitState(x, y, id+1, UnitType.Dragon, serverName);
+			UnitState u = new UnitState(x, y, getNewUnitId(), UnitType.Dragon, serverName);
 			if(!setupDragons.containsKey(serverName)) {
 				setupDragons.put(serverName, new ArrayList<UnitState>());
 			}
