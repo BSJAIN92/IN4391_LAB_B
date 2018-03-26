@@ -9,8 +9,10 @@ import distributed.systems.das.GameState;
 import distributed.systems.das.RequestHandlingServer;
 import distributed.systems.das.common.Direction;
 import distributed.systems.das.common.Message;
+import distributed.systems.das.common.MessageType;
 import distributed.systems.das.common.UnitState;
 import distributed.systems.das.common.UnitType;
+import distributed.systems.das.services.LoggingService;
 import distributed.systems.das.services.MessagingHandler;
 
 public class Player implements Runnable, Serializable{
@@ -41,7 +43,7 @@ public class Player implements Runnable, Serializable{
 
 	@Override
 	public void run() {
-		// TODO Auto-generated method stub
+		LoggingService.log(MessageType.setup, "Player thread: "+ Thread.currentThread().getName() +" started");
 		Direction direction;
 		UnitType adjacentUnitType;
 		int targetX = 0, targetY = 0;
@@ -51,7 +53,7 @@ public class Player implements Runnable, Serializable{
 		while(GameState.getRunningState() && this.running) {
 			try {			
 				/* Sleep while the player is considering its next move */
-				Thread.currentThread().sleep((int)(timeBetweenTurns * 500 * GameState.GAME_SPEED));
+				Thread.currentThread().sleep((int)(timeBetweenTurns * GameState.GAME_SPEED));
 
 				/* Stop if the player runs out of hitpoints */
 				if (unit.hitPoints <= 0)
@@ -104,14 +106,17 @@ public class Player implements Runnable, Serializable{
 				switch (adjacentUnitType) {
 					case Undefined:
 						// There is no unit in the square. Move the player to this square
+						LoggingService.log(MessageType.moveUnit, "Player thread: "+ Thread.currentThread().getName() + " called moveUnit");
 						battlefield.moveUnit(unit, targetX, targetY);
 						break;
 					case Player:
 						// There is a player in the square, attempt a healing
+						LoggingService.log(MessageType.healDamage, "Player thread: "+ Thread.currentThread().getName() + " called healDamage");
 						battlefield.healDamage(unit, targetX, targetY);
 						break;
 					case Dragon:
 						// There is a dragon in the square, attempt a dragon slaying
+						LoggingService.log(MessageType.dealDamage, "Player thread: "+ Thread.currentThread().getName() + " called dealDamage");
 						battlefield.dealDamage(unit, targetX, targetY);
 						break;
 				}

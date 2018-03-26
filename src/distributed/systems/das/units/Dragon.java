@@ -6,8 +6,10 @@ import distributed.systems.das.GameServer;
 import distributed.systems.das.GameState;
 import distributed.systems.das.RequestHandlingServer;
 import distributed.systems.das.common.Direction;
+import distributed.systems.das.common.MessageType;
 import distributed.systems.das.common.UnitState;
 import distributed.systems.das.common.UnitType;
+import distributed.systems.das.services.LoggingService;
 
 public class Dragon implements Runnable{
 	/* Reaction speed of the dragon
@@ -42,6 +44,7 @@ public class Dragon implements Runnable{
 	 * specific enemy.
 	 */
 	public void run() {
+		LoggingService.log(MessageType.setup, "Dragon thread: "+ Thread.currentThread().getName() +" started");
 		ArrayList<Direction> adjacentPlayers = new ArrayList<Direction> ();		
 		while(GameState.getRunningState()) {
 			try {
@@ -81,15 +84,19 @@ public class Dragon implements Runnable{
 				// Attack the player
 				switch (playerToAttack) {
 					case up:
+						LoggingService.log(MessageType.dealDamage, "Dragon thread: "+ Thread.currentThread().getName() + " called dealDamage on up");
 						battlefield.dealDamage( unit, unit.x, unit.y - 1);
 						break;
 					case right:
+						LoggingService.log(MessageType.dealDamage, "Dragon thread: "+ Thread.currentThread().getName() + " called dealDamage on right");
 						battlefield.dealDamage(unit,  unit.x + 1, unit.y);
 						break;
 					case down:
+						LoggingService.log(MessageType.dealDamage, "Dragon thread: "+ Thread.currentThread().getName() + " called dealDamage on down");
 						battlefield.dealDamage( unit, unit.x, unit.y + 1);
 						break;
 					case left:
+						LoggingService.log(MessageType.dealDamage, "Dragon thread: "+ Thread.currentThread().getName() + " called dealDamage on left");
 						battlefield.dealDamage( unit, unit.x - 1, unit.y);
 						break;
 				}

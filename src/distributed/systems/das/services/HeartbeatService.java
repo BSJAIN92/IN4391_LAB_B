@@ -10,26 +10,28 @@ import distributed.systems.das.common.MessageType;
 public class HeartbeatService implements Runnable {
 	
 	private MessagingHandler backupServerhandle;
-	private String serverIp;
+	private String serverName;
 	private int frequency;
 	private Thread runnerThread; 
 	
 	public HeartbeatService(MessagingHandler backupServerHandle, String ip) {
 		this.backupServerhandle = backupServerHandle;
-		this.serverIp = ip;
-		this.frequency = 3000;
+		this.serverName = ip;
+		this.frequency = 20000;
 		runnerThread = new Thread(this);
 		runnerThread.start();
 	}
 	public void run() {
+		LoggingService.log(MessageType.setup, "HeartbeatService thread: "+ Thread.currentThread().getName() +" started for server "+serverName);
 		//periodically send heartbeat message to designated server	
 		try {
+			Thread.currentThread();
 			/* sleep for 3 seconds */
-			Thread.currentThread().sleep(frequency);
+			Thread.sleep(frequency);
 			
 			/* send heartbeat message*/
 			Message hb = new Message();
-			hb.put("serverName", serverIp);
+			hb.put("serverName", serverName);
 			Message reply = null;
 			try {
 				reply = this.backupServerhandle.onHeartbeatReceived(hb);

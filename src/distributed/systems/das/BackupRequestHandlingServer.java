@@ -187,6 +187,7 @@ public class BackupRequestHandlingServer implements MessagingHandler {
 	}
 	
 	public synchronized void processServerFailure(String serverName) {
+		LoggingService.log(MessageType.changeServer, "Backup server is in process Server Failure method.");
 		//spawn players and dragons in backup server
 		ArrayList<Integer> ids = new ArrayList<Integer>();
 		ArrayList<UnitState> units = null;
@@ -252,6 +253,7 @@ public class BackupRequestHandlingServer implements MessagingHandler {
 			reqHandlingServerStub = (MessagingHandler) UnicastRemoteObject.exportObject(reqHandlingServer, 0);
 			Registry registry = LocateRegistry.getRegistry();
 	        registry.rebind(myServerName, reqHandlingServerStub);
+	        LoggingService.log(MessageType.setup, "Registered remote object for backup server.");
 		} catch (RemoteException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
@@ -261,10 +263,12 @@ public class BackupRequestHandlingServer implements MessagingHandler {
 	@Override
 	public synchronized Message onMessageReceived(Message message) throws RemoteException {
 		if(message.get("type").equals(MessageType.setup)) {
+			LoggingService.log(MessageType.setup, "Backup server received player and dragon setup message from gameServer.");
 			try {
 				Registry remoteRegistry  = LocateRegistry.getRegistry(gameServerIp, port);
 				gameServerHandle= (MessagingHandler) remoteRegistry.lookup("gameServer");
 				if(reqFailoverService == null) {
+					LoggingService.log(MessageType.changeServer, "Instantiate failover service.");
 					reqFailoverService = new RequestServerFailoverService(this);
 				}
 			} catch (RemoteException e) {
@@ -273,6 +277,7 @@ public class BackupRequestHandlingServer implements MessagingHandler {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
 			}
+			LoggingService.log(MessageType.setup, "Backup server: place initial players and dragons on map.");
 			setupDragons = (HashMap<String, ArrayList<UnitState>>) message.get("dragons");
 			//k: serverName v: arraylist of dragon units
 			setupDragons.forEach((k,v)->{
@@ -303,7 +308,7 @@ public class BackupRequestHandlingServer implements MessagingHandler {
 	}
 	
 	@Override
-	public void onSynchronizationMessageReceived(Message message) throws RemoteException {
+	public synchronized void onSynchronizationMessageReceived(Message message) throws RemoteException {
 		if(message.get("request").equals(MessageType.sync)) {
 			UnitState u;
 			MessageType messageType = (MessageType)message.get("type");
@@ -355,7 +360,7 @@ public class BackupRequestHandlingServer implements MessagingHandler {
 		}		
 	}
 	
-	public Message onHeartbeatReceived(Message msg) {		
+	public synchronized Message onHeartbeatReceived(Message msg) {		
 		Message reply = null;	
 		String name = msg.get("serverName").toString();
 		String text = "Received heartbeat from " +  name;
@@ -370,10 +375,10 @@ public class BackupRequestHandlingServer implements MessagingHandler {
 		reply.put("serverName", myServerName);
 		return reply;
 	}
-	public HashMap<String, Long> getTimeSinceHeartbeat() {
+	public synchronized HashMap<String, Long> getTimeSinceHeartbeat() {
 		return timeSinceHeartbeat;
 	}
-	public static void setTimeSinceHeartbeat(HashMap<String, Long> timeSinceHeartbeat) {
+	public synchronized static void setTimeSinceHeartbeat(HashMap<String, Long> timeSinceHeartbeat) {
 		BackupRequestHandlingServer.timeSinceHeartbeat = timeSinceHeartbeat;
 	}
 }

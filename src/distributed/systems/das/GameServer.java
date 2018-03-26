@@ -173,6 +173,7 @@ public class GameServer implements MessagingHandler {
 		{
 			case spawnUnit:
 				unit = this.spawnUnit((Integer)msg.get("x"), (Integer)msg.get("y"), (UnitType)msg.get("unitType"), origin);
+				LoggingService.log(MessageType.spawnUnit, "Game server received "+ request +" request for unitId " + unit.unitID + "from server: " + origin);
 				reply = new Message();
 				reply.put("id", msg.get("id"));
 				reply.put("unit", unit);
@@ -215,6 +216,7 @@ public class GameServer implements MessagingHandler {
 				int x = (Integer)msg.get("toX");
 				int y = (Integer)msg.get("toY");
 				unit = this.getUnit(x, y);
+				LoggingService.log(MessageType.spawnUnit, "Game server received "+ request +" request for unitId " + unit.unitID + "from server: " + origin);
 				if (unit != null)
 					unit.adjustHitPoints(-(Integer)msg.get("damagePoints") );
 				
@@ -237,6 +239,7 @@ public class GameServer implements MessagingHandler {
 				int x = (Integer)msg.get("toX");
 				int y = (Integer)msg.get("toY");
 				unit = this.getUnit(x, y);
+				LoggingService.log(MessageType.spawnUnit, "Game server received "+ request +" request for unitId " + unit.unitID + "from server: " + origin);
 				if (unit != null)
 					unit.adjustHitPoints((Integer)msg.get("healedPoints") );
 				
@@ -258,6 +261,7 @@ public class GameServer implements MessagingHandler {
 				reply = new Message();
 				boolean moveSuccess; 
 				UnitState msgUnit = (UnitState)msg.get("unit");
+				LoggingService.log(MessageType.moveUnit, "Game server received "+ request +" request for unitId " + msgUnit.unitID + "from server: " + origin);
 				unit = this.moveUnit(msgUnit, (Integer)msg.get("toX"), (Integer)msg.get("toY"));
 				moveSuccess = unit != null ? true : false;
 				
@@ -295,11 +299,10 @@ public class GameServer implements MessagingHandler {
 			case changeServer:
 				// get new req handling server name, ip addr from the message
 				String removeServerName = msg.get("serverName").toString();
-				
+				LoggingService.log(MessageType.changeServer, "Game server received change server from backup because server: "+ removeServerName + "failed.");
 				//chande rmi handler
 				requestHandlingServers.remove(removeServerName);
-				break;
-				
+				break;				
 		default:
 			break;
 		}
@@ -308,7 +311,7 @@ public class GameServer implements MessagingHandler {
 		if(sync != null) {
 			for(String key : requestHandlingServers.keySet()) {
 				if(!key.equals(origin)) {
-					LoggingService.log(MessageType.setup, "send sync to: "+key);
+					LoggingService.log(MessageType.sync, "send sync to: "+key);
 					requestHandlingServers.get(key).onSynchronizationMessageReceived(sync);
 				}
 			}
@@ -362,7 +365,7 @@ public class GameServer implements MessagingHandler {
 					setupMessage.put("players", setupPlayers);
 					setupMessage.put("dragons", setupDragons);
 					setupMessage.put("type", MessageType.setup);
-					LoggingService.log(MessageType.setup, "send player and dragon setup message to "+serverName);
+					LoggingService.log(MessageType.setup, "Game server: send player and dragon setup message to "+serverName);
 					handler.onMessageReceived(setupMessage);
 				} catch (RemoteException e) {
 					// TODO Auto-generated catch block
@@ -378,6 +381,7 @@ public class GameServer implements MessagingHandler {
 	}
 
 	private static void initializePlayers(int playerCount, int dragonCount) {
+		LoggingService.log(MessageType.setup, "game server: Initialize players");
 		for(int id = dragonCount; id < playerCount; id++)
 		{
 			int x, y, attempt = 0;
@@ -402,6 +406,7 @@ public class GameServer implements MessagingHandler {
 	}
 	
 	private static void initializeDragons(int dragonCount) {
+		LoggingService.log(MessageType.setup, "game server: Initialize dragons.");
 		for(int id = 0; id < dragonCount; id++)
 		{
 			int x, y;

@@ -5,6 +5,7 @@ import java.util.Map;
 
 import distributed.systems.das.BackupRequestHandlingServer;
 import distributed.systems.das.GameState;
+import distributed.systems.das.common.MessageType;
 
 public class RequestServerFailoverService implements Runnable{
 	
@@ -19,19 +20,21 @@ public class RequestServerFailoverService implements Runnable{
 	
 	@Override
 	public void run() {
+		
+		LoggingService.log(MessageType.changeServer, "Started thread "+Thread.currentThread().getName() + " for failover listener.");
 		//periodically check if all expected heartbeats have been received
 		while(GameState.getRunningState()) {
 			if(serverState.getTimeSinceHeartbeat()!= null && !serverState.getTimeSinceHeartbeat().isEmpty()) {
 				Iterator it = serverState.getTimeSinceHeartbeat().entrySet().iterator();
 				while(it.hasNext()) {
 					Map.Entry pair = (Map.Entry) it.next();
-					//Date d1 = df.parse(pair.getValue().toString());
-					//Date d2 = df.parse(new SimpleDateFormat("yyyy.MM.dd.HH.mm.ss").format(new Date()));
 					long diff = Math.abs(System.currentTimeMillis() - (long)pair.getValue());
-					if(diff > 5000) { 
+					LoggingService.log(MessageType.changeServer, "Time difference is: "+diff + " for failover listener.");
+					if(diff > 40000) { 
 						/*exceed heartbeat wait time. assume helper server is dead.
 						 * tell main game server and backup game server that this server is dead
 						 * */
+						LoggingService.log(MessageType.changeServer, "Time limit exceeded. Start failover process.");
 						serverState.processServerFailure(pair.getKey().toString());
 					}
 				}
