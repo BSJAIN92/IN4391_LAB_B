@@ -23,12 +23,12 @@ public class GameServer implements MessagingHandler {
 	private int syncMessageId = 0;
 	
 	private static GameServer battlefield;
-	private static int numberOfReqServers = 1;
+	private static int numberOfReqServers;
 	public final static int MAP_WIDTH = 25;
 	public final static int MAP_HEIGHT = 25;  
 	private static HashMap<String, MessagingHandler> requestHandlingServers = new HashMap<String, MessagingHandler>();
-	private static HashMap<String, ArrayList<UnitState>> setupPlayers= new HashMap<String, ArrayList<UnitState>>();
-	private static HashMap<String, ArrayList<UnitState>> setupDragons= new HashMap<String, ArrayList<UnitState>>();
+	private static HashMap<String, ArrayList<UnitState>> setupDragons = new HashMap<String, ArrayList<UnitState>>();
+	private static HashMap<String, ArrayList<UnitState>> setupPlayers = new HashMap<String, ArrayList<UnitState>>();
 	
 	private GameServer() {
 		map = new UnitState[MAP_WIDTH][MAP_HEIGHT];
@@ -295,6 +295,8 @@ public class GameServer implements MessagingHandler {
 		default:
 			break;
 		}
+		
+		//TODO Send sync message to Game Server backup and req server backup also
 		if(sync != null) {
 			for(String key : requestHandlingServers.keySet()) {
 				if(!key.equals(origin)) {
@@ -306,20 +308,23 @@ public class GameServer implements MessagingHandler {
 		return reply;
 	}
 	
+	public Message onHeartbeatReceived(Message msg) {
+		return null;
+	}
+	
 	public static void main(String args[]) throws NotBoundException {
-		//String ip = args[0];
+		String name = args[0];
 		String ip = "localhost";
 		int port = 1099;
-		int numberOfReqHandlers = 1;
+		numberOfReqServers = Integer.parseInt(args[1]);
 		try {
 			//LocateRegistry.createRegistry(port);
-			String name = "gameServer";
             MessagingHandler gameServer = new GameServer();
             MessagingHandler gameServerStub = (MessagingHandler) UnicastRemoteObject.exportObject(gameServer, 0);
             Registry registry = LocateRegistry.getRegistry();
             registry.rebind(name, gameServerStub);
             LoggingService.log(MessageType.setup, "game server registry created.");
-            for(int i=0;i<numberOfReqHandlers;i++) {
+            for(int i=0;i<numberOfReqServers;i++) {
             	
             	String s = "reqServer"+(i+1);
             	Registry remoteRegistry  = LocateRegistry.getRegistry(ip, port);
@@ -327,23 +332,23 @@ public class GameServer implements MessagingHandler {
     			requestHandlingServers.put(s, reqServerHandle);
             }
             //initialize battlefield
-            battlefield = GameServer.getBattleField();
+            battlefield = GameServer.getBattleField();            
             
             //initialize dragons
             initializeDragons(2);
             
             //initialize players
-            initializePlayers(6, 2);            
+            initializePlayers(6, 2);
             
             //send this info to respective servers
             requestHandlingServers.forEach((serverName, handler) -> {
 				try {
 					Message setupMessage = new Message();
 					setupMessage.put("id", 0);
-					setupMessage.put("players", setupPlayers.get(serverName));
-					setupMessage.put("dragons", setupDragons.get(serverName));
+					setupMessage.put("players", setupPlayers);
+					setupMessage.put("dragons", setupDragons);
 					setupMessage.put("type", MessageType.setup);
-					LoggingService.log(MessageType.setup, "send player and dragon setup message.");
+					LoggingService.log(MessageType.setup, "send player and dragon setup message to "+serverName);
 					handler.onMessageReceived(setupMessage);
 				} catch (RemoteException e) {
 					// TODO Auto-generated catch block

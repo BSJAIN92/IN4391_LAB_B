@@ -1,5 +1,10 @@
 package distributed.systems.das;
 
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileReader;
+import java.io.IOException;
 import java.io.Serializable;
 import java.lang.reflect.InvocationTargetException;
 import java.rmi.NotBoundException;
@@ -8,6 +13,7 @@ import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 import java.rmi.server.UnicastRemoteObject;
 import java.util.ArrayList;
+import java.util.HashMap;
 
 import distributed.systems.das.common.Message;
 import distributed.systems.das.common.MessageType;
@@ -23,17 +29,40 @@ public class RequestHandlingServer implements MessagingHandler {
 	public int MAP_HEIGHT;
 	public UnitState[][] map;
 	private int localMessageCounter = 0;
-	
+
 	private static RequestHandlingServer battlefield;
-	private static String GameServerIp = "localhost";
+	private static String gameServerIp = "localhost";
+	private static String backupServerIp = "localhost";
+	private static String myServerName = "localhost";
 	private static int port = 1099; //we use default RMI Registry port
 	private static MessagingHandler gameServerHandle;
-	private Thread heartbeatThread;
+	private static MessagingHandler backupServerHandle;
+	private static HeartbeatService heartbeat;
+	private HashMap<String, String> serverIps;
+	
 	
 	private RequestHandlingServer(int width, int height){
 		MAP_WIDTH = width;
 		MAP_HEIGHT = height;
-		heartbeatThread = new Thread()
+		
+		//read all IP addresses from config file and add them to hashmap
+		//createIpMap();	
+	}
+	private void createIpMap() {
+		File ipFile = new File("C:\\Users\\Apourva\\Documents\\DAS\\IN4391_LAB_B\\src\\distributed\\systems\\das\\config\\ipAddresses.txt");
+		try {
+			BufferedReader in = new BufferedReader(new FileReader(ipFile));
+			String line = null;
+			while((line = in.readLine()) != null) {
+				String[] s = line.split(" ");
+				serverIps.put(s[0], s[1]);
+			}
+		} catch (FileNotFoundException e) {
+			e.printStackTrace();
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
 	}
 	public static RequestHandlingServer getRequestHandlingServer(){
 		if(battlefield == null) {
@@ -42,7 +71,6 @@ public class RequestHandlingServer implements MessagingHandler {
 		}
 		return battlefield;
 	}
-	
 	
 	public UnitState getUnit(int x, int y)
 	{
@@ -159,14 +187,26 @@ public class RequestHandlingServer implements MessagingHandler {
 	}
 	public static void main(String args[]) throws NotBoundException {	
 		try {
-			//String name = args[0];
-			String name = "reqServer1";
+			myServerName = args[0]; 
 			LocateRegistry.createRegistry(1099);
-			MessagingHandler reqHandlingServer = getRequestHandlingServer();
-            MessagingHandler reqHandlingServerStub = (MessagingHandler) UnicastRemoteObject.exportObject(reqHandlingServer, 0);
-            Registry registry = LocateRegistry.getRegistry();
-            registry.rebind(name, reqHandlingServerStub);
+			
 		} catch (RemoteException e) {
+			e.printStackTrace();
+		}
+		MessagingHandler reqHandlingServer = getRequestHandlingServer();
+        MessagingHandler reqHandlingServerStub;
+		try {
+			reqHandlingServerStub = (MessagingHandler) UnicastRemoteObject.exportObject(reqHandlingServer, 0);
+			Registry registry = LocateRegistry.getRegistry();
+	        registry.rebind(myServerName, reqHandlingServerStub);
+	        
+	        if(myServerName.contains("req")) {
+	        	Registry backupRegistry = LocateRegistry.getRegistry(backupServerIp);
+	        	backupServerHandle = (MessagingHandler) backupRegistry.lookup("backupServerReq");
+	        	heartbeat = new HeartbeatService(backupServerHandle, myServerName);
+	        }
+		} catch (RemoteException e) {
+			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 	}
@@ -175,7 +215,7 @@ public class RequestHandlingServer implements MessagingHandler {
 	public synchronized Message onMessageReceived(Message message) throws RemoteException {
 		if(message.get("type").equals(MessageType.setup)) {
 			try {
-				Registry remoteRegistry  = LocateRegistry.getRegistry(GameServerIp, port);
+				Registry remoteRegistry  = LocateRegistry.getRegistry(gameServerIp, port);
 				gameServerHandle= (MessagingHandler) remoteRegistry.lookup("gameServer");
 			} catch (RemoteException e) {
 				e.printStackTrace();
@@ -187,11 +227,13 @@ public class RequestHandlingServer implements MessagingHandler {
 			 * thread, making sure it does not 
 			 * block the system.
 			 */
-			for(UnitState u : (ArrayList<UnitState>) message.get("dragons")) {
+			HashMap<String, ArrayList<UnitState>> setupDragons = (HashMap<String, ArrayList<UnitState>>) message.get("dragons");
+			for(UnitState u : setupDragons.get(myServerName)) {
 				placeUnitOnMap(u);
 				Dragon d = new Dragon(u);
 			}
-			for(UnitState u : (ArrayList<UnitState>) message.get("players")) {
+			HashMap<String, ArrayList<UnitState>> setupPlayers = (HashMap<String, ArrayList<UnitState>>) message.get("players");
+			for(UnitState u : setupPlayers.get(myServerName)) {
 				placeUnitOnMap(u);
 				Player p = new Player(u);
 			}			
@@ -249,7 +291,18 @@ public class RequestHandlingServer implements MessagingHandler {
 			default:
 				break;			
 			}
-		}
+		}		
+	}
+	
+	public Message onHeartbeatReceived(Message msg) {
+		Message reply = null;	
 		
+		String text = "Received heartbeat from " +msg.get("serverName");
+		LoggingService.log(MessageType.heartbeat, text);
+		
+		reply = new Message();
+		reply.put("serverName", myServerName);
+		
+		return reply;
 	}
 }

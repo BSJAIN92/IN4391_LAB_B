@@ -8,5 +8,5 @@ import distributed.systems.das.common.Message;
 public interface MessagingHandler extends Remote {
 	Message onMessageReceived(Message message) throws RemoteException;
 	void onSynchronizationMessageReceived(Message message) throws RemoteException;
-	Message onHeartbeatReceived(Message message);
+	Message onHeartbeatReceived(Message message) throws RemoteException;
 }

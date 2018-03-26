@@ -11,16 +11,17 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 
 public class LoggingService {
-	static String logFile = "C:\\Users\\Apourva\\Documents\\DasLog\\GameLog.txt";
+	static String gamelogFile = "C:\\Users\\Apourva\\Documents\\DasLog\\GameLog.txt";
 	final static Object lock = new Object();
+	
 	public static void log(MessageType messageType, String text) {
 		synchronized(lock) {
-			File log = new File(logFile);
+			File log = new File(gamelogFile);
 			String timeStamp = new SimpleDateFormat("yyyy.MM.dd.HH.mm.ss").format(new Date());
 			String s = "[" +timeStamp +"]"+ " [" +messageType.name()+"] "+ text;
 			PrintWriter out;
 			try {
-				out = new PrintWriter(new BufferedWriter(new FileWriter(logFile, true)));
+				out = new PrintWriter(new BufferedWriter(new FileWriter(gamelogFile, true)));
 				out.println(s);
 				out.close();
 			} catch (IOException e) {
