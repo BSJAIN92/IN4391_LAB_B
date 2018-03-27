@@ -18,7 +18,7 @@ public class Dragon implements Runnable{
 	 */
 	protected int timeBetweenTurns; 
 	public static final int MIN_TIME_BETWEEN_TURNS = 2;
-	public static final int MAX_TIME_BETWEEN_TURNS = 7;
+	public static final int MAX_TIME_BETWEEN_TURNS = 5;
 	Thread runnerThread;
 	RequestHandlingServer battlefield;
 	UnitState unit;
@@ -43,13 +43,13 @@ public class Dragon implements Runnable{
 	 * It checks if an enemy is near and, if so, it attacks that
 	 * specific enemy.
 	 */
-	public void run() {
+	public synchronized void run() {
 		LoggingService.log(MessageType.setup, "Dragon thread: "+ Thread.currentThread().getName() +" started");
 		ArrayList<Direction> adjacentPlayers = new ArrayList<Direction> ();		
 		while(GameState.getRunningState()) {
 			try {
 				/* Sleep while the dragon is considering its next move */
-				Thread.currentThread().sleep((int)(timeBetweenTurns * 500 * GameState.GAME_SPEED));
+				Thread.currentThread().sleep((int)(timeBetweenTurns * GameState.GAME_SPEED));
 
 				/* Stop if the dragon runs out of hitpoints */
 				if (unit.hitPoints <= 0)
@@ -85,19 +85,19 @@ public class Dragon implements Runnable{
 				switch (playerToAttack) {
 					case up:
 						LoggingService.log(MessageType.dealDamage, "Dragon thread: "+ Thread.currentThread().getName() + " called dealDamage on up");
-						battlefield.dealDamage( unit, unit.x, unit.y - 1);
+						battlefield.dealDamageRequest( unit, unit.x, unit.y - 1);
 						break;
 					case right:
 						LoggingService.log(MessageType.dealDamage, "Dragon thread: "+ Thread.currentThread().getName() + " called dealDamage on right");
-						battlefield.dealDamage(unit,  unit.x + 1, unit.y);
+						battlefield.dealDamageRequest(unit,  unit.x + 1, unit.y);
 						break;
 					case down:
 						LoggingService.log(MessageType.dealDamage, "Dragon thread: "+ Thread.currentThread().getName() + " called dealDamage on down");
-						battlefield.dealDamage( unit, unit.x, unit.y + 1);
+						battlefield.dealDamageRequest( unit, unit.x, unit.y + 1);
 						break;
 					case left:
 						LoggingService.log(MessageType.dealDamage, "Dragon thread: "+ Thread.currentThread().getName() + " called dealDamage on left");
-						battlefield.dealDamage( unit, unit.x - 1, unit.y);
+						battlefield.dealDamageRequest( unit, unit.x - 1, unit.y);
 						break;
 				}
 				

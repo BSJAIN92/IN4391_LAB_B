@@ -27,7 +27,7 @@ public class Player implements Runnable, Serializable{
 	 */
 	protected int timeBetweenTurns;
 	public static final int MIN_TIME_BETWEEN_TURNS = 2;
-	public static final int MAX_TIME_BETWEEN_TURNS = 7;
+	public static final int MAX_TIME_BETWEEN_TURNS = 5;
 	public static final int MAP_SIZE = 25;
 	
 	private static final long serialVersionUID = -3507657523648823999L;
@@ -42,7 +42,7 @@ public class Player implements Runnable, Serializable{
 	}
 
 	@Override
-	public void run() {
+	public synchronized void run() {
 		LoggingService.log(MessageType.setup, "Player thread: "+ Thread.currentThread().getName() +" started");
 		Direction direction;
 		UnitType adjacentUnitType;
@@ -107,17 +107,17 @@ public class Player implements Runnable, Serializable{
 					case Undefined:
 						// There is no unit in the square. Move the player to this square
 						LoggingService.log(MessageType.moveUnit, "Player thread: "+ Thread.currentThread().getName() + " called moveUnit");
-						battlefield.moveUnit(unit, targetX, targetY);
+						battlefield.moveUnitRequest(unit, targetX, targetY);
 						break;
 					case Player:
 						// There is a player in the square, attempt a healing
 						LoggingService.log(MessageType.healDamage, "Player thread: "+ Thread.currentThread().getName() + " called healDamage");
-						battlefield.healDamage(unit, targetX, targetY);
+						battlefield.healDamageRequest(unit, targetX, targetY);
 						break;
 					case Dragon:
 						// There is a dragon in the square, attempt a dragon slaying
 						LoggingService.log(MessageType.dealDamage, "Player thread: "+ Thread.currentThread().getName() + " called dealDamage");
-						battlefield.dealDamage(unit, targetX, targetY);
+						battlefield.dealDamageRequest(unit, targetX, targetY);
 						break;
 				}
 			} catch (InterruptedException e) {

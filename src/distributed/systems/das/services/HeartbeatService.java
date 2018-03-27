@@ -17,35 +17,36 @@ public class HeartbeatService implements Runnable {
 	public HeartbeatService(MessagingHandler backupServerHandle, String ip) {
 		this.backupServerhandle = backupServerHandle;
 		this.serverName = ip;
-		this.frequency = 20000;
+		this.frequency = 3000;
 		runnerThread = new Thread(this);
 		runnerThread.start();
 	}
-	public void run() {
-		LoggingService.log(MessageType.setup, "HeartbeatService thread: "+ Thread.currentThread().getName() +" started for server "+serverName);
-		//periodically send heartbeat message to designated server	
-		try {
-			Thread.currentThread();
-			/* sleep for 3 seconds */
-			Thread.sleep(frequency);
-			
-			/* send heartbeat message*/
-			Message hb = new Message();
-			hb.put("serverName", serverName);
-			Message reply = null;
+	public synchronized void run() {
+		LoggingService.log(MessageType.setup, "["+serverName+"]"+"HeartbeatService thread: "+ Thread.currentThread().getName() +" started for server "+serverName);
+		//periodically send heart beat message to designated server
+		while(GameState.getRunningState()) {
+			LoggingService.log(MessageType.setup, "["+serverName+"]"+"Heartbeat sending.");
 			try {
+				Thread.currentThread();
+				/* sleep for 3 seconds */
+				Thread.sleep(frequency);
+				
+				/* send heart beat message*/
+				Message hb = new Message();
+				hb.put("serverName", serverName);
+				Message reply = null;
 				reply = this.backupServerhandle.onHeartbeatReceived(hb);
-			} catch (RemoteException e) {
+				/* process the reply heart beat*/
+				String s = "["+serverName+"]"+"Heartbeat reply received from server: "+reply.get("serverName");
+				LoggingService.log(MessageType.heartbeat, s);
+					
+			}catch (RemoteException e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
+			}				 
+			catch (InterruptedException e) {			
+				e.printStackTrace();
 			}
-			
-			/* process the reply heartbeat*/
-			String s = "Heartbeat reply received from server: "+reply.get("serverName");
-			LoggingService.log(MessageType.heartbeat, s);
-			
-		} catch (InterruptedException e) {			
-			e.printStackTrace();
 		}
 	}
 }

@@ -54,7 +54,6 @@ public class BackupRequestHandlingServer implements MessagingHandler {
 	private BackupRequestHandlingServer(int width, int height){
 		MAP_WIDTH = width;
 		MAP_HEIGHT = height;
-		setTimeSinceHeartbeat(new HashMap<String, Long>());
 		//read all IP addresses from config file and add them to hashmap
 		//createIpMap();	
 	}
@@ -90,7 +89,28 @@ public class BackupRequestHandlingServer implements MessagingHandler {
 		return map[x][y];
 	}
 	
-	public synchronized void moveUnit(UnitState unit, int toX, int toY) {
+	private synchronized UnitState moveUnit(UnitState unit, int newX, int newY)
+	{
+		if (newX >= 0 && newX < MAP_WIDTH)
+			if (newY >= 0 && newY < MAP_HEIGHT)
+				if (map[newX][newY] == null) {
+					UnitState newUnit = new UnitState(newX, newY, unit.unitID, unit.unitType, unit.helperServerAddress);
+					map[newX][newY] =  newUnit;
+					removeUnit(unit.x, unit.y);
+					return map[newX][newY];
+				}
+		return null;
+	}
+	
+	private synchronized void removeUnit(int x, int y)
+	{
+		UnitState unitToRemove = this.getUnit(x, y);
+		if (unitToRemove == null)
+			return; // There was no unit here to remove
+		map[x][y] = null;
+	}
+	
+	public synchronized void moveUnitRequest(UnitState unit, int toX, int toY) {
 		Message moveMessage = new Message();
 		int id = ++localMessageCounter;
 		moveMessage.setMessageType(MessageType.moveUnit);
@@ -100,7 +120,7 @@ public class BackupRequestHandlingServer implements MessagingHandler {
 		moveMessage.put("id", id);
 		moveMessage.put("unit", unit);
 		moveMessage.put("origin", unit.helperServerAddress);
-		String text = "Move unit X: "+ unit.x + " Y: "+ unit.y + " unitID: "+unit.unitID+ "to X:"+toX+" Y: "+toY;
+		String text = "["+ myServerName+"]"+"Move unit X: "+ unit.x + " Y: "+ unit.y + " unitID: "+unit.unitID+ "to X:"+toX+" Y: "+toY;
 		LoggingService.log(MessageType.moveUnit, text);
 		try {
 			Message reply = gameServerHandle.onMessageReceived(moveMessage);
@@ -113,7 +133,7 @@ public class BackupRequestHandlingServer implements MessagingHandler {
 		}
 	}
 	
-	public synchronized void healDamage(UnitState unit, int toX, int toY) {
+	public synchronized void healDamageRequest(UnitState unit, int toX, int toY) {
 		int id;
 		Message healMessage;
 		synchronized (this) {
@@ -126,7 +146,7 @@ public class BackupRequestHandlingServer implements MessagingHandler {
 			healMessage.put("healedPoints", unit.attackPoints);
 			healMessage.put("id", id);
 			healMessage.put("origin", unit.helperServerAddress);
-			String text = "Heal from unit X: "+ unit.x + " Y: "+ unit.y + " unitID: "+unit.unitID+ "to X:"+toX+" Y: "+toY;
+			String text = "["+ myServerName+"]"+"Heal from unit X: "+ unit.x + " Y: "+ unit.y + " unitID: "+unit.unitID+ "to X:"+toX+" Y: "+toY;
 			LoggingService.log(MessageType.healDamage, text);
 			try {
 				Message reply = gameServerHandle.onMessageReceived(healMessage);
@@ -138,7 +158,7 @@ public class BackupRequestHandlingServer implements MessagingHandler {
 		}	
 	}
 	
-	public synchronized void dealDamage(UnitState unit, int toX, int toY) {
+	public synchronized void dealDamageRequest(UnitState unit, int toX, int toY) {
 		int id;
 		Message dealMessage;
 		synchronized(this) {
@@ -151,7 +171,7 @@ public class BackupRequestHandlingServer implements MessagingHandler {
 			dealMessage.put("damagePoints", unit.attackPoints);
 			dealMessage.put("id", id);
 			dealMessage.put("origin", unit.helperServerAddress);
-			String text = "Deal unit X: "+ unit.x + " Y: "+ unit.y + " unitID: "+unit.unitID+ "to X:"+toX+" Y: "+toY;
+			String text = "["+ myServerName+"]"+"Deal unit X: "+ unit.x + " Y: "+ unit.y + " unitID: "+unit.unitID+ "to X:"+toX+" Y: "+toY;
 			LoggingService.log(MessageType.dealDamage, text);
 			try {
 				Message reply = gameServerHandle.onMessageReceived(dealMessage);
@@ -163,7 +183,7 @@ public class BackupRequestHandlingServer implements MessagingHandler {
 		}
 	}
 	
-	public synchronized void removeUnit(int x, int y)
+	public synchronized void removeUnitRequest(int x, int y)
 	{
 		int id;
 		Message removeMessage;
@@ -187,7 +207,7 @@ public class BackupRequestHandlingServer implements MessagingHandler {
 	}
 	
 	public synchronized void processServerFailure(String serverName) {
-		LoggingService.log(MessageType.changeServer, "Backup server is in process Server Failure method.");
+		LoggingService.log(MessageType.changeServer, "["+ myServerName+"]"+"Backup server is in process Server Failure method.");
 		//spawn players and dragons in backup server
 		ArrayList<Integer> ids = new ArrayList<Integer>();
 		ArrayList<UnitState> units = null;
@@ -197,18 +217,25 @@ public class BackupRequestHandlingServer implements MessagingHandler {
 		for(UnitState u : setupPlayers.get(serverName)) {
 			ids.add(u.unitID);
 		}
+		LoggingService.log(MessageType.changeServer, "["+ myServerName+"]"+"Process Server Failure. Start Ids: "+ ids.size());
 		units = getUnitsFromUnitIds(ids);
+		LoggingService.log(MessageType.changeServer, "["+ myServerName+"]"+"Process Server Failure. Start Units: "+ units.size());
 		for(UnitState u: units) {
 			if(u.unitType == UnitType.Dragon){
+				LoggingService.log(MessageType.changeServer, "["+ myServerName+"]"+"Process Server Failure. Start Dragon: "+ u.unitID);
 				Dragon d = new Dragon(u);
 			}
-			else {
+			if(u.unitType == UnitType.Player) {
+				LoggingService.log(MessageType.changeServer, "["+ myServerName+"]"+"Process Server Failure. Start Player: "+ u.unitID);
 				Player p = new Player(u);
 			}			
 		}			
 		//send information of failure to main game server and backup game server
 		Message msg = new Message();
+		int id = ++localMessageCounter;
+		msg.put("id", id);
 		msg.put("serverName", serverName);
+		msg.put("origin", myServerName);
 		msg.put("request", MessageType.changeServer);
 		msg.setMessageType(MessageType.changeServer);		
 		try {
@@ -223,7 +250,8 @@ public class BackupRequestHandlingServer implements MessagingHandler {
 		ArrayList<UnitState> unitsToSpawn = new ArrayList<UnitState>();
 		for(int i=0;i<MAP_WIDTH;i++) {
 			for(int j=0;j<MAP_HEIGHT;j++) {
-				if(map[i][j] != null && ids.contains(map[i][j].unitID)) {
+				if(map[i][j] != null && ids.contains(map[i][j].unitID) && !unitsToSpawn.contains(map[i][j])) {
+					LoggingService.log(MessageType.changeServer, "Map ["+i+"]"+"["+j+"] = "+map[i][j].unitID );
 					unitsToSpawn.add(map[i][j]);
 				}
 			}
@@ -253,7 +281,7 @@ public class BackupRequestHandlingServer implements MessagingHandler {
 			reqHandlingServerStub = (MessagingHandler) UnicastRemoteObject.exportObject(reqHandlingServer, 0);
 			Registry registry = LocateRegistry.getRegistry();
 	        registry.rebind(myServerName, reqHandlingServerStub);
-	        LoggingService.log(MessageType.setup, "Registered remote object for backup server.");
+	        LoggingService.log(MessageType.setup, "["+ myServerName+"]"+"Registered remote object for backup server.");
 		} catch (RemoteException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
@@ -263,21 +291,17 @@ public class BackupRequestHandlingServer implements MessagingHandler {
 	@Override
 	public synchronized Message onMessageReceived(Message message) throws RemoteException {
 		if(message.get("type").equals(MessageType.setup)) {
-			LoggingService.log(MessageType.setup, "Backup server received player and dragon setup message from gameServer.");
+			LoggingService.log(MessageType.setup, "["+ myServerName+"]"+"Backup server received player and dragon setup message from gameServer.");
 			try {
 				Registry remoteRegistry  = LocateRegistry.getRegistry(gameServerIp, port);
 				gameServerHandle= (MessagingHandler) remoteRegistry.lookup("gameServer");
-				if(reqFailoverService == null) {
-					LoggingService.log(MessageType.changeServer, "Instantiate failover service.");
-					reqFailoverService = new RequestServerFailoverService(this);
-				}
 			} catch (RemoteException e) {
 				e.printStackTrace();
 			} catch (NotBoundException e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
 			}
-			LoggingService.log(MessageType.setup, "Backup server: place initial players and dragons on map.");
+			LoggingService.log(MessageType.setup, "["+ myServerName+"]"+"Backup server: place initial players and dragons on map.");
 			setupDragons = (HashMap<String, ArrayList<UnitState>>) message.get("dragons");
 			//k: serverName v: arraylist of dragon units
 			setupDragons.forEach((k,v)->{
@@ -311,7 +335,10 @@ public class BackupRequestHandlingServer implements MessagingHandler {
 	public synchronized void onSynchronizationMessageReceived(Message message) throws RemoteException {
 		if(message.get("request").equals(MessageType.sync)) {
 			UnitState u;
+			int x = 0, y = 0;
 			MessageType messageType = (MessageType)message.get("type");
+			String text = "["+ myServerName+"]"+"Received sync message for action "+messageType;
+			LoggingService.log(MessageType.sync, "");
 			switch(messageType) {
 			case spawnUnit:
 				u = (UnitState) message.get("unit");
@@ -320,31 +347,35 @@ public class BackupRequestHandlingServer implements MessagingHandler {
 				}
 				break;
 			case dealDamage:
+				x = (Integer)message.get("x");
+				y = (Integer)message.get("y");
+				Integer damagePoints = (Integer)message.get("damagePoints");
 				u = (UnitState) message.get("unit");
-				synchronized(this) {
-					map[u.x][u.y].hitPoints = u.hitPoints;
+				u = this.getUnit(x, y);
+				if (u != null) {
+					u.adjustHitPoints(-damagePoints );
 				}
 				break;
 			case healDamage:
 				u = (UnitState) message.get("unit");
-				synchronized(this) {
-					map[u.x][u.y].hitPoints = u.hitPoints;
-				}
+				x = (int)message.get("x");
+				y = (int)message.get("y");
+				u = this.getUnit(x, y);
+				if (u != null)
+					u.adjustHitPoints((Integer)message.get("healedPoints") );
 				break;
 			case moveUnit:
-				u = (UnitState) message.get("unit");
-				synchronized(this) {
-					map[u.x][u.y] = u;
-				}
+				UnitState oldUnit = (UnitState) message.get("oldUnit");
+				int toX = Integer.parseInt(message.get("toX").toString());
+				int toY = Integer.parseInt(message.get("toY").toString());
+				moveUnit(oldUnit, toX, toY);
 				break;
 			case putUnit:
 				break;
 			case removeUnit:
-				int x = (Integer)message.get("removeX");
-				int y = (Integer)message.get("removeY");
-				synchronized(this) {
-					map[x][y] = null;
-				}
+				x = (Integer)message.get("removeX");
+				y = (Integer)message.get("removeY");
+				removeUnit(x,y);
 				break;
 			case getType:
 				break;
@@ -363,8 +394,13 @@ public class BackupRequestHandlingServer implements MessagingHandler {
 	public synchronized Message onHeartbeatReceived(Message msg) {		
 		Message reply = null;	
 		String name = msg.get("serverName").toString();
-		String text = "Received heartbeat from " +  name;
+		String text = "["+ myServerName+"]"+"Received heartbeat from " +  name;
 		LoggingService.log(MessageType.heartbeat, text);
+		if(reqFailoverService == null) {
+			LoggingService.log(MessageType.changeServer, "["+ myServerName+"]"+"Instantiate failover service.");
+			reqFailoverService = new RequestServerFailoverService(this);
+			setTimeSinceHeartbeat(new HashMap<String, Long>());
+		}		
 		if(!getTimeSinceHeartbeat().containsKey(name)) {
 			getTimeSinceHeartbeat().put(name, System.currentTimeMillis());
 		}
@@ -378,7 +414,10 @@ public class BackupRequestHandlingServer implements MessagingHandler {
 	public synchronized HashMap<String, Long> getTimeSinceHeartbeat() {
 		return timeSinceHeartbeat;
 	}
-	public synchronized static void setTimeSinceHeartbeat(HashMap<String, Long> timeSinceHeartbeat) {
+	public synchronized void setTimeSinceHeartbeat(HashMap<String, Long> timeSinceHeartbeat) {
 		BackupRequestHandlingServer.timeSinceHeartbeat = timeSinceHeartbeat;
+	}
+	public synchronized void removeTimeSinceHeartbeatServer(String name) {
+		timeSinceHeartbeat.remove(name);
 	}
 }
