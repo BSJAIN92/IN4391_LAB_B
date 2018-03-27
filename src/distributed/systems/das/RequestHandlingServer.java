@@ -22,6 +22,7 @@ import java.util.HashMap;
 import distributed.systems.das.common.Message;
 import distributed.systems.das.common.MessageType;
 import distributed.systems.das.common.UnitState;
+import distributed.systems.das.services.ClientServer;
 import distributed.systems.das.services.HeartbeatService;
 import distributed.systems.das.services.LoggingService;
 import distributed.systems.das.services.MessagingHandler;
@@ -34,17 +35,16 @@ public class RequestHandlingServer implements MessagingHandler {
 	public int MAP_HEIGHT;
 	public UnitState[][] map;
 	private int localMessageCounter = 0;
-
 	private static RequestHandlingServer battlefield;
-	private static String gameServerIp = "localhost";
-	private static String backupServerIp = "localhost";
-	private static String myServerName = "localhost";
+	//private static String gameServerIp = "localhost";
+	//private static String backupServerIp = "localhost";
+	private static String myServerName;
 	private static int port = 1099; //we use default RMI Registry port
 	private static MessagingHandler gameServerHandle;
 	private static MessagingHandler backupReqServerHandle;
 	private static HeartbeatService heartbeat;
 	private static RequestServerFailoverService reqFailoverService;
-	private HashMap<String, String> serverIps;
+	private static HashMap<String, String> serverIps;
 	public static HashMap<String, Long> timeSinceHeartbeat;
 	
 	
@@ -52,16 +52,19 @@ public class RequestHandlingServer implements MessagingHandler {
 		MAP_WIDTH = width;
 		MAP_HEIGHT = height;
 		//read all IP addresses from config file and add them to hashmap
-		//createIpMap();	
+		createIpMap();	
 	}
 	private void createIpMap() {
+		serverIps = new HashMap<String, String>();
 		File ipFile = new File("C:\\Users\\Apourva\\Documents\\DAS\\IN4391_LAB_B\\src\\distributed\\systems\\das\\config\\ipAddresses.txt");
 		try {
 			BufferedReader in = new BufferedReader(new FileReader(ipFile));
 			String line = null;
 			while((line = in.readLine()) != null) {
 				String[] s = line.split(" ");
-				serverIps.put(s[0], s[1]);
+				if(!s[0].equals(myServerName)) {
+					serverIps.put(s[0], s[1]);
+				}
 			}
 		} catch (FileNotFoundException e) {
 			e.printStackTrace();
@@ -70,7 +73,7 @@ public class RequestHandlingServer implements MessagingHandler {
 			e.printStackTrace();
 		}
 	}
-	public static RequestHandlingServer getRequestHandlingServer(){
+	public static MessagingHandler getRequestHandlingServer(){
 		if(battlefield == null) {
 			battlefield = new RequestHandlingServer(25, 25);
 			battlefield.map = new UnitState[25][25];
@@ -88,26 +91,35 @@ public class RequestHandlingServer implements MessagingHandler {
 	
 	private synchronized UnitState moveUnit(UnitState unit, int newX, int newY)
 	{
-		if (newX >= 0 && newX < MAP_WIDTH)
-			if (newY >= 0 && newY < MAP_HEIGHT)
-				if (map[newX][newY] == null) {
-					UnitState newUnit = new UnitState(newX, newY, unit.unitID, unit.unitType, unit.helperServerAddress);
-					map[newX][newY] =  newUnit;
-					removeUnit(unit.x, unit.y);
-					return map[newX][newY];
-				}
-		return null;
+		synchronized(this) {
+			if (newX >= 0 && newX < MAP_WIDTH)
+				if (newY >= 0 && newY < MAP_HEIGHT)
+					if (map[newX][newY] == null) {
+						/*UnitState newUnit = new UnitState(newX, newY, unit.unitID, unit.unitType, unit.helperServerAddress);
+						map[newX][newY] =  newUnit;
+						removeUnit(unit.x, unit.y);
+						return map[newX][newY];*/
+						removeUnit(unit.x, unit.y);
+						unit.x = newX;
+						unit.y = newY;
+						map[newX][newY] = unit;
+						return map[newX][newY];
+					}
+			return null;
+		}
 	}
 	
 	private synchronized void removeUnit(int x, int y)
 	{
-		UnitState unitToRemove = this.getUnit(x, y);
-		if (unitToRemove == null)
-			return; // There was no unit here to remove
-		map[x][y] = null;
+		synchronized(this) {
+			map[x][y] = null;
+		}
 	}
 	
 	public synchronized void moveUnitRequest(UnitState unit, int toX, int toY) {
+		int a = unit.x;
+		int b = unit.y;
+		int uid = unit.unitID;
 		Message moveMessage = new Message();
 		int id = ++localMessageCounter;
 		moveMessage.setMessageType(MessageType.moveUnit);
@@ -122,8 +134,17 @@ public class RequestHandlingServer implements MessagingHandler {
 		try {
 			Message reply = gameServerHandle.onMessageReceived(moveMessage);
 			if((boolean)reply.get("moveSuccess")) {
-				map[toX][toY] =  (UnitState)reply.get("unit");
-				map[unit.x][unit.y] = null;
+				synchronized(this) {
+					moveUnit(unit, toX, toY);
+				}
+				if(map[a][b] == null) {
+					LoggingService.log(MessageType.moveUnit, "["+ myServerName+"]"+"moveRequest UnitId: "+uid
+							+"move from ["+a +","+b+"] old map is updated to null.");
+				}
+				if(map[toX][toY] != null) {
+					LoggingService.log(MessageType.moveUnit, "["+ myServerName+"]"+"moveRequest UnitId: "+uid
+							+"move to ["+toX +","+toY+"] new map is not null. It is ["+map[toX][toY].x +","+map[toX][toY].y+"]");
+				}
 			}
 		} catch (RemoteException e) { 
 			e.printStackTrace();
@@ -147,8 +168,12 @@ public class RequestHandlingServer implements MessagingHandler {
 			LoggingService.log(MessageType.healDamage, text);
 			try {
 				Message reply = gameServerHandle.onMessageReceived(healMessage);
-				UnitState healedUnit = (UnitState) reply.get("unit");
-				map[toX][toY].hitPoints = healedUnit.hitPoints;
+				if(reply!= null) {
+					UnitState toUnit = getUnit(toX, toY);
+					synchronized(this) {
+						toUnit.adjustHitPoints(unit.attackPoints);
+					}
+				}
 			} catch (RemoteException e) {
 				e.printStackTrace();
 			}
@@ -172,8 +197,12 @@ public class RequestHandlingServer implements MessagingHandler {
 			LoggingService.log(MessageType.dealDamage, text);
 			try {
 				Message reply = gameServerHandle.onMessageReceived(dealMessage);
-				UnitState damagedUnit = (UnitState) reply.get("unit");
-				map[toX][toY].hitPoints = damagedUnit.hitPoints;
+				if(reply!= null) {
+					UnitState toUnit = getUnit(toX, toY);
+					synchronized(this) {
+						toUnit.adjustHitPoints(-unit.attackPoints);
+					}
+				}
 			} catch (RemoteException e) {
 				e.printStackTrace();
 			}
@@ -195,7 +224,9 @@ public class RequestHandlingServer implements MessagingHandler {
 			try {
 				reply = gameServerHandle.onMessageReceived(removeMessage);
 				if(reply != null) {
-					map[x][y] = null;
+					synchronized(this) {
+						removeUnit(x, y);
+					}
 				}
 			} catch (RemoteException e) {
 				e.printStackTrace();
@@ -205,7 +236,7 @@ public class RequestHandlingServer implements MessagingHandler {
 	
 	private void placeUnitOnMap(UnitState u) {
 		try {
-			battlefield.map[u.x][u.y] = u;
+			map[u.x][u.y] = u;
 		}
 		catch(Exception e) {
 			e.printStackTrace();
@@ -226,7 +257,7 @@ public class RequestHandlingServer implements MessagingHandler {
 			reqHandlingServerStub = (MessagingHandler) UnicastRemoteObject.exportObject(reqHandlingServer, 0);
 			Registry registry = LocateRegistry.getRegistry();
 	        registry.rebind(myServerName, reqHandlingServerStub);
-	        Registry backupRegistry = LocateRegistry.getRegistry(backupServerIp);
+	        Registry backupRegistry = LocateRegistry.getRegistry(serverIps.get("backupReqServer"));
 	        LoggingService.log(MessageType.setup, "["+ myServerName+"]" +" remote object registered.");
 	        backupReqServerHandle = (MessagingHandler) backupRegistry.lookup("backupServerReq");
 	        heartbeat = new HeartbeatService(backupReqServerHandle, myServerName);
@@ -242,7 +273,7 @@ public class RequestHandlingServer implements MessagingHandler {
 		if(message.get("type").equals(MessageType.setup)) {
 			LoggingService.log(MessageType.setup, "["+ myServerName+"]"+ " received player and dragon setup message from gameServer.");
 			try {
-				Registry remoteRegistry  = LocateRegistry.getRegistry(gameServerIp, port);
+				Registry remoteRegistry  = LocateRegistry.getRegistry(serverIps.get("gameServer"), port);
 				gameServerHandle= (MessagingHandler) remoteRegistry.lookup("gameServer");
 				LoggingService.log(MessageType.setup, "["+ myServerName+"]"+" gameServerHandle obtained."+gameServerHandle);
 			} catch (RemoteException e) {
@@ -256,7 +287,7 @@ public class RequestHandlingServer implements MessagingHandler {
 				v.forEach(u->{
 					placeUnitOnMap(u);
 					if(u.helperServerAddress.equals(myServerName)) {
-						Dragon d = new Dragon(u);
+						Dragon d = new Dragon(u, battlefield, myServerName);
 					}
 				});
 			});
@@ -265,7 +296,7 @@ public class RequestHandlingServer implements MessagingHandler {
 				v.forEach(u->{
 					placeUnitOnMap(u);
 					if(u.helperServerAddress.equals(myServerName)) {
-						Player d = new Player(u);
+						Player d = new Player(u, battlefield, myServerName);
 					}
 				});
 			});
@@ -273,52 +304,72 @@ public class RequestHandlingServer implements MessagingHandler {
 		return null;
 	}
 	
-	@Override
-	public void onSynchronizationMessageReceived(Message message) throws RemoteException {
-		LoggingService.log(MessageType.sync, "["+ myServerName+"]" + "received sync message.");
+	public synchronized void onSynchronizationMessageReceived(Message message) throws RemoteException {
 		if(message.get("request").equals(MessageType.sync)) {
 			UnitState u;
+			int x = 0, y = 0;
 			MessageType messageType = (MessageType)message.get("type");
-			LoggingService.log(MessageType.setup, "["+ myServerName+"]" + " received sync message of type: "+ messageType);
+			String text = "["+ myServerName+"]"+"Received sync message for action "+messageType;
+			LoggingService.log(MessageType.sync, text);
 			switch(messageType) {
 			case spawnUnit:
-				LoggingService.log(MessageType.setup, "["+ myServerName+"]" + " perform "+ messageType);
 				u = (UnitState) message.get("unit");
 				synchronized(this) {
 					map[u.x][u.y] = u;
 				}
 				break;
 			case dealDamage:
-				LoggingService.log(MessageType.setup, "["+ myServerName+"]" + " perform "+ messageType);
+				x = (Integer)message.get("x");
+				y = (Integer)message.get("y");
+				Integer damagePoints = (Integer)message.get("damagePoints");
 				u = (UnitState) message.get("unit");
-				synchronized(this) {
-					map[u.x][u.y].hitPoints = u.hitPoints;
+				u = this.getUnit(x, y);
+				if (u != null) {
+					synchronized(this) {
+						u.adjustHitPoints(-damagePoints );
+					}
 				}
 				break;
 			case healDamage:
-				LoggingService.log(MessageType.setup, "["+ myServerName+"]" + " perform "+ messageType);
 				u = (UnitState) message.get("unit");
-				synchronized(this) {
-					map[u.x][u.y].hitPoints = u.hitPoints;
-				}
+				x = (int)message.get("x");
+				y = (int)message.get("y");
+				u = this.getUnit(x, y);
+				if (u != null)
+					synchronized(this) {
+						u.adjustHitPoints((Integer)message.get("healedPoints") );
+					}
 				break;
 			case moveUnit:
-				LoggingService.log(MessageType.setup, "["+ myServerName+"]" + " perform "+ messageType);
-				UnitState oldUnit = (UnitState) message.get("unit");
+				int fromX = Integer.parseInt(message.get("fromX").toString());;
+				int fromY = Integer.parseInt(message.get("fromY").toString());;
 				int toX = Integer.parseInt(message.get("toX").toString());
 				int toY = Integer.parseInt(message.get("toY").toString());
-				moveUnit(oldUnit, toX, toY);
-				/*u = (UnitState) message.get("unit");
+				LoggingService.log(MessageType.moveUnit, "YYYYYYYYYYYYYYYY "+ fromX+" "+fromY+  " "+toX+ " "+toY);
+				UnitState oldUnit = getUnit(fromX, fromY);
+				if(oldUnit == null) {
+					LoggingService.log(MessageType.moveUnit, "YYYYYYYYYYYYYYYY "+ fromX+" "+fromY+  " "+toX+ " "+toY);
+				}
 				synchronized(this) {
-					map[u.x][u.y] = u;
-				}*/
+					moveUnit(oldUnit, toX, toY);
+				}
+				if(map[fromX][fromY] == null) {
+					LoggingService.log(MessageType.moveUnit,"["+ myServerName+"]"+ "moveRequest UnitId: "+oldUnit.unitID
+							+" move from ["+fromX +","+fromY+"] old map is updated to null.");
+				}
+				else {
+					LoggingService.log(MessageType.moveUnit,"["+ myServerName+"]"+ "XXXXIt is ["+map[fromX][fromY].x +","+map[fromX][fromY].y+"]");
+				}
+				if(map[toX][toY] != null) {
+					LoggingService.log(MessageType.moveUnit,"["+ myServerName+"]"+ "moveRequest UnitId: "+oldUnit.unitID
+							+" move to ["+toX +","+toY+"] new map is not null. It is ["+map[toX][toY].x +","+map[toX][toY].y+"]");
+				}
 				break;
 			case putUnit:
 				break;
 			case removeUnit:
-				LoggingService.log(MessageType.setup, "["+ myServerName+"]" + " perform "+ messageType);
-				int x = (Integer)message.get("removeX");
-				int y = (Integer)message.get("removeY");
+				x = (Integer)message.get("removeX");
+				y = (Integer)message.get("removeY");
 				removeUnit(x,y);
 				break;
 			case getType:
@@ -334,6 +385,7 @@ public class RequestHandlingServer implements MessagingHandler {
 			}
 		}		
 	}
+	
 	
 	public Message onHeartbeatReceived(Message msg) {		
 		Message reply = null;	

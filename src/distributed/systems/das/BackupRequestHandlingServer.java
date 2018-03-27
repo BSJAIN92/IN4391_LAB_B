@@ -23,6 +23,7 @@ import distributed.systems.das.common.Message;
 import distributed.systems.das.common.MessageType;
 import distributed.systems.das.common.UnitState;
 import distributed.systems.das.common.UnitType;
+import distributed.systems.das.services.ClientServer;
 import distributed.systems.das.services.HeartbeatService;
 import distributed.systems.das.services.LoggingService;
 import distributed.systems.das.services.MessagingHandler;
@@ -30,16 +31,16 @@ import distributed.systems.das.services.RequestServerFailoverService;
 import distributed.systems.das.units.Dragon;
 import distributed.systems.das.units.Player;
 
-public class BackupRequestHandlingServer implements MessagingHandler {
+public class BackupRequestHandlingServer implements MessagingHandler{
 	public int MAP_WIDTH;
 	public int MAP_HEIGHT;
 	public UnitState[][] map;
 	private int localMessageCounter = 0;
 
 	private static BackupRequestHandlingServer battlefield;
-	private static String gameServerIp = "localhost";
-	private static String backupServerIp = "localhost";
-	private static String myServerName = "localhost";
+	//private static String gameServerIp = "localhost";
+	//private static String backupServerIp = "localhost";
+	private static String myServerName;
 	private static int port = 1099; //we use default RMI Registry port
 	private static MessagingHandler gameServerHandle;
 	private static MessagingHandler backupReqServerHandle;
@@ -55,16 +56,19 @@ public class BackupRequestHandlingServer implements MessagingHandler {
 		MAP_WIDTH = width;
 		MAP_HEIGHT = height;
 		//read all IP addresses from config file and add them to hashmap
-		//createIpMap();	
+		createIpMap();	
 	}
 	private void createIpMap() {
 		File ipFile = new File("C:\\Users\\Apourva\\Documents\\DAS\\IN4391_LAB_B\\src\\distributed\\systems\\das\\config\\ipAddresses.txt");
+		serverIps = new HashMap<String, String>();
 		try {
 			BufferedReader in = new BufferedReader(new FileReader(ipFile));
 			String line = null;
 			while((line = in.readLine()) != null) {
 				String[] s = line.split(" ");
-				serverIps.put(s[0], s[1]);
+				if(!s[0].equals(myServerName)) {
+					serverIps.put(s[0], s[1]);
+				}
 			}
 		} catch (FileNotFoundException e) {
 			e.printStackTrace();
@@ -73,7 +77,7 @@ public class BackupRequestHandlingServer implements MessagingHandler {
 			e.printStackTrace();
 		}
 	}
-	public static BackupRequestHandlingServer getRequestHandlingServer(){
+	public static MessagingHandler getRequestHandlingServer(){
 		if(battlefield == null) {
 			battlefield = new BackupRequestHandlingServer(25, 25);
 			battlefield.map = new UnitState[25][25];
@@ -81,36 +85,50 @@ public class BackupRequestHandlingServer implements MessagingHandler {
 		return battlefield;
 	}
 	
-	public UnitState getUnit(int x, int y)
+	public synchronized UnitState getUnit(int x, int y)
 	{
-		assert x >= 0 && x < map.length;
-		assert y >= 0 && x < map[0].length;
-
-		return map[x][y];
+		synchronized(this) {
+			//assert x >= 0 && x < map.length;
+			//assert y >= 0 && x < map[0].length;
+			if(x >= 0 && x <MAP_WIDTH && y >= 0 && y < MAP_HEIGHT) {
+				LoggingService.log(MessageType.getUnit, "pppppppppppppppppppp" + map[x][y]);
+				return map[x][y];
+			}
+		}
+		return null;
 	}
 	
 	private synchronized UnitState moveUnit(UnitState unit, int newX, int newY)
 	{
-		if (newX >= 0 && newX < MAP_WIDTH)
-			if (newY >= 0 && newY < MAP_HEIGHT)
-				if (map[newX][newY] == null) {
-					UnitState newUnit = new UnitState(newX, newY, unit.unitID, unit.unitType, unit.helperServerAddress);
-					map[newX][newY] =  newUnit;
-					removeUnit(unit.x, unit.y);
-					return map[newX][newY];
-				}
-		return null;
+		synchronized(this) {
+			if (newX >= 0 && newX < MAP_WIDTH)
+				if (newY >= 0 && newY < MAP_HEIGHT)
+					if (map[newX][newY] == null) {
+						/*UnitState newUnit = new UnitState(newX, newY, unit.unitID, unit.unitType, unit.helperServerAddress);
+						map[newX][newY] =  newUnit;
+						removeUnit(unit.x, unit.y);
+						return map[newX][newY];*/
+						removeUnit(unit.x, unit.y);
+						unit.x = newX;
+						unit.y = newY;
+						map[newX][newY] = unit;
+						return map[newX][newY];
+					}
+			return null;
+		}
 	}
 	
 	private synchronized void removeUnit(int x, int y)
 	{
-		UnitState unitToRemove = this.getUnit(x, y);
-		if (unitToRemove == null)
-			return; // There was no unit here to remove
-		map[x][y] = null;
+		synchronized(this) {
+			map[x][y] = null;
+		}
 	}
 	
 	public synchronized void moveUnitRequest(UnitState unit, int toX, int toY) {
+		int a = unit.x;
+		int b = unit.y;
+		int uid = unit.unitID;
 		Message moveMessage = new Message();
 		int id = ++localMessageCounter;
 		moveMessage.setMessageType(MessageType.moveUnit);
@@ -120,13 +138,22 @@ public class BackupRequestHandlingServer implements MessagingHandler {
 		moveMessage.put("id", id);
 		moveMessage.put("unit", unit);
 		moveMessage.put("origin", unit.helperServerAddress);
-		String text = "["+ myServerName+"]"+"Move unit X: "+ unit.x + " Y: "+ unit.y + " unitID: "+unit.unitID+ "to X:"+toX+" Y: "+toY;
+		String text = "["+ myServerName+"]"+"Move unit X: "+ unit.x + " Y: "+ unit.y + " unitID: "+uid+ "to X:"+toX+" Y: "+toY;
 		LoggingService.log(MessageType.moveUnit, text);
 		try {
 			Message reply = gameServerHandle.onMessageReceived(moveMessage);
 			if((boolean)reply.get("moveSuccess")) {
-				map[toX][toY] =  (UnitState)reply.get("unit");
-				map[unit.x][unit.y] = null;
+				synchronized(this) {
+					moveUnit(unit, toX, toY);
+				}
+			}
+			if(map[a][b] == null) {
+				LoggingService.log(MessageType.moveUnit,"["+ myServerName+"]"+ "moveRequest UnitId: "+uid
+						+"move from ["+a +","+b+"] old map is updated to null.");
+			}
+			if(map[toX][toY] != null) {
+				LoggingService.log(MessageType.moveUnit,"["+ myServerName+"]"+ "moveRequest UnitId: "+uid
+						+"move to ["+toX +","+toY+"] new map is not null. It is ["+map[toX][toY].x +","+map[toX][toY].y+"]");
 			}
 		} catch (RemoteException e) { 
 			e.printStackTrace();
@@ -150,8 +177,10 @@ public class BackupRequestHandlingServer implements MessagingHandler {
 			LoggingService.log(MessageType.healDamage, text);
 			try {
 				Message reply = gameServerHandle.onMessageReceived(healMessage);
-				UnitState healedUnit = (UnitState) reply.get("unit");
-				map[toX][toY].hitPoints = healedUnit.hitPoints;
+				if(reply!= null) {
+					UnitState toUnit = getUnit(toX, toY);
+					toUnit.adjustHitPoints(unit.attackPoints);
+				}
 			} catch (RemoteException e) {
 				e.printStackTrace();
 			}
@@ -175,8 +204,10 @@ public class BackupRequestHandlingServer implements MessagingHandler {
 			LoggingService.log(MessageType.dealDamage, text);
 			try {
 				Message reply = gameServerHandle.onMessageReceived(dealMessage);
-				UnitState damagedUnit = (UnitState) reply.get("unit");
-				map[toX][toY].hitPoints = damagedUnit.hitPoints;
+				if(reply!= null) {
+					UnitState toUnit = getUnit(toX, toY);
+					toUnit.adjustHitPoints(-unit.attackPoints);
+				}
 			} catch (RemoteException e) {
 				e.printStackTrace();
 			}
@@ -223,11 +254,11 @@ public class BackupRequestHandlingServer implements MessagingHandler {
 		for(UnitState u: units) {
 			if(u.unitType == UnitType.Dragon){
 				LoggingService.log(MessageType.changeServer, "["+ myServerName+"]"+"Process Server Failure. Start Dragon: "+ u.unitID);
-				Dragon d = new Dragon(u);
+				Dragon d = new Dragon(u, battlefield, myServerName);
 			}
 			if(u.unitType == UnitType.Player) {
 				LoggingService.log(MessageType.changeServer, "["+ myServerName+"]"+"Process Server Failure. Start Player: "+ u.unitID);
-				Player p = new Player(u);
+				Player p = new Player(u, battlefield, myServerName);
 			}			
 		}			
 		//send information of failure to main game server and backup game server
@@ -258,8 +289,9 @@ public class BackupRequestHandlingServer implements MessagingHandler {
 		}
 		return unitsToSpawn;
 	}
-	private void placeUnitOnMap(UnitState u) {
+	private synchronized void placeUnitOnMap(UnitState u) {
 		try {
+			LoggingService.log(MessageType.setup, "placed "+u.x+" "+u.y+"on map.");
 			battlefield.map[u.x][u.y] = u;
 		}
 		catch(Exception e) {
@@ -293,7 +325,7 @@ public class BackupRequestHandlingServer implements MessagingHandler {
 		if(message.get("type").equals(MessageType.setup)) {
 			LoggingService.log(MessageType.setup, "["+ myServerName+"]"+"Backup server received player and dragon setup message from gameServer.");
 			try {
-				Registry remoteRegistry  = LocateRegistry.getRegistry(gameServerIp, port);
+				Registry remoteRegistry  = LocateRegistry.getRegistry(serverIps.get("gameServer"), port);
 				gameServerHandle= (MessagingHandler) remoteRegistry.lookup("gameServer");
 			} catch (RemoteException e) {
 				e.printStackTrace();
@@ -313,6 +345,7 @@ public class BackupRequestHandlingServer implements MessagingHandler {
 			});
 		}
 		if(message.get("type").equals(MessageType.changeServer)) {
+			LoggingService.log(MessageType.changeServer, "["+ myServerName+"]"+"In main server failure scenario.");
 			//get the name of the backup server
 			String backupServerName = message.get("serverName").toString();
 			String backupServerIpAddress = message.get("ipAddress").toString();
@@ -338,7 +371,7 @@ public class BackupRequestHandlingServer implements MessagingHandler {
 			int x = 0, y = 0;
 			MessageType messageType = (MessageType)message.get("type");
 			String text = "["+ myServerName+"]"+"Received sync message for action "+messageType;
-			LoggingService.log(MessageType.sync, "");
+			LoggingService.log(MessageType.sync, text);
 			switch(messageType) {
 			case spawnUnit:
 				u = (UnitState) message.get("unit");
@@ -353,7 +386,9 @@ public class BackupRequestHandlingServer implements MessagingHandler {
 				u = (UnitState) message.get("unit");
 				u = this.getUnit(x, y);
 				if (u != null) {
-					u.adjustHitPoints(-damagePoints );
+					synchronized(this) {
+						u.adjustHitPoints(-damagePoints );
+					}
 				}
 				break;
 			case healDamage:
@@ -362,13 +397,34 @@ public class BackupRequestHandlingServer implements MessagingHandler {
 				y = (int)message.get("y");
 				u = this.getUnit(x, y);
 				if (u != null)
-					u.adjustHitPoints((Integer)message.get("healedPoints") );
+					synchronized(this) {
+						u.adjustHitPoints((Integer)message.get("healedPoints") );
+					}
 				break;
 			case moveUnit:
-				UnitState oldUnit = (UnitState) message.get("oldUnit");
+				int fromX = Integer.parseInt(message.get("fromX").toString());;
+				int fromY = Integer.parseInt(message.get("fromY").toString());;
 				int toX = Integer.parseInt(message.get("toX").toString());
 				int toY = Integer.parseInt(message.get("toY").toString());
-				moveUnit(oldUnit, toX, toY);
+				LoggingService.log(MessageType.moveUnit, "YYYYYYYYYYYYYYYY "+ fromX+" "+fromY+  " "+toX+ " "+toY);
+				UnitState oldUnit = getUnit(fromX, fromY);
+				if(oldUnit == null) {
+					LoggingService.log(MessageType.moveUnit, "YYYYYYYYYYYYYYYY "+ fromX+" "+fromY+  " "+toX+ " "+toY);
+				}
+				synchronized(this) {
+					moveUnit(oldUnit, toX, toY);
+				}
+				if(map[fromX][fromY] == null) {
+					LoggingService.log(MessageType.moveUnit,"["+ myServerName+"]"+ "moveRequest UnitId: "+oldUnit.unitID
+							+" move from ["+fromX +","+fromY+"] old map is updated to null.");
+				}
+				else {
+					LoggingService.log(MessageType.moveUnit,"["+ myServerName+"]"+ "XXXXIt is ["+map[fromX][fromY].x +","+map[fromX][fromY].y+"]");
+				}
+				if(map[toX][toY] != null) {
+					LoggingService.log(MessageType.moveUnit,"["+ myServerName+"]"+ "moveRequest UnitId: "+oldUnit.unitID
+							+" move to ["+toX +","+toY+"] new map is not null. It is ["+map[toX][toY].x +","+map[toX][toY].y+"]");
+				}
 				break;
 			case putUnit:
 				break;

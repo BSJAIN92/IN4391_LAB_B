@@ -1,5 +1,10 @@
 package distributed.systems.das;
 
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileReader;
+import java.io.IOException;
 import java.rmi.NotBoundException;
 import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
@@ -30,9 +35,11 @@ public class GameServer implements MessagingHandler {
 	private static HashMap<String, MessagingHandler> requestHandlingServers = new HashMap<String, MessagingHandler>();
 	private static HashMap<String, ArrayList<UnitState>> setupDragons = new HashMap<String, ArrayList<UnitState>>();
 	private static HashMap<String, ArrayList<UnitState>> setupPlayers = new HashMap<String, ArrayList<UnitState>>();
+	private static HashMap<String, String> serverIps;
 	
 	private GameServer() {
 		map = new UnitState[MAP_WIDTH][MAP_HEIGHT];
+		createIpMap();
 	}
 	
 	public static GameServer getBattleField() {
@@ -42,6 +49,25 @@ public class GameServer implements MessagingHandler {
 		return battlefield;
 	}
 	
+	private void createIpMap() {
+		serverIps = new HashMap<String, String>();
+		File ipFile = new File("C:\\Users\\Apourva\\Documents\\DAS\\IN4391_LAB_B\\src\\distributed\\systems\\das\\config\\ipAddresses.txt");
+		try {
+			BufferedReader in = new BufferedReader(new FileReader(ipFile));
+			String line = null;
+			while((line = in.readLine()) != null) {
+				String[] s = line.split(" ");
+				if(!s[0].equals(myServerName)) {
+					serverIps.put(s[0], s[1]);
+				}
+			}
+		} catch (FileNotFoundException e) {
+			e.printStackTrace();
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+	}
 	/**
 	 * Returns a new unique unit ID.
 	 * @return int: a new unique unit ID.
@@ -135,15 +161,18 @@ public class GameServer implements MessagingHandler {
 	 */
 	private synchronized UnitState moveUnit(UnitState unit, int newX, int newY)
 	{
-		if (newX >= 0 && newX < MAP_WIDTH)
-			if (newY >= 0 && newY < MAP_HEIGHT)
-				if (map[newX][newY] == null) {
-					UnitState newUnit = new UnitState(newX, newY, unit.unitID, unit.unitType, unit.helperServerAddress);
-					map[newX][newY] =  newUnit;
-					removeUnit(unit.x, unit.y);
-					return map[newX][newY];
-				}
-		return null;
+		synchronized(this) {
+			if (newX >= 0 && newX < MAP_WIDTH)
+				if (newY >= 0 && newY < MAP_HEIGHT)
+					if (map[newX][newY] == null) {
+						removeUnit(unit.x, unit.y);
+						unit.x = newX;
+						unit.y = newY;
+						map[newX][newY] = unit;
+						return map[newX][newY];
+					}
+			return null;
+		}
 	}
 
 	/**
@@ -154,10 +183,9 @@ public class GameServer implements MessagingHandler {
 	 */
 	private synchronized void removeUnit(int x, int y)
 	{
-		UnitState unitToRemove = this.getUnit(x, y);
-		if (unitToRemove == null)
-			return; // There was no unit here to remove
-		map[x][y] = null;
+		synchronized(this) {
+			map[x][y] = null;
+		}
 	}
 	
 	
@@ -170,6 +198,10 @@ public class GameServer implements MessagingHandler {
 		String origin = (String)msg.get("origin");
 		MessageType request = (MessageType)msg.get("request");
 		UnitState unit;
+		Integer toX;
+		Integer toY;
+		//Integer toX = (Integer)msg.get("toX");
+		//Integer toY = (Integer)msg.get("toY");
 		switch(request)
 		{
 			case spawnUnit:
@@ -218,7 +250,7 @@ public class GameServer implements MessagingHandler {
 				int y = (Integer)msg.get("toY");
 				Integer damagePoints = (Integer)msg.get("damagePoints");
 				unit = this.getUnit(x, y);
-				LoggingService.log(MessageType.spawnUnit, "["+myServerName+"]"+"Game server received "+ request +" request for unitId " + unit.unitID + "from server: " + origin);
+				LoggingService.log(MessageType.dealDamage, "["+myServerName+"]"+"Game server received "+ request +" request for unitId " + unit.unitID + "from server: " + origin);
 				if (unit != null) {
 					unit.adjustHitPoints(-damagePoints );
 				}
@@ -265,12 +297,29 @@ public class GameServer implements MessagingHandler {
 				break;
 			}
 			case moveUnit:
+				toX = (Integer)msg.get("toX");
+				toY = (Integer)msg.get("toY");
 				reply = new Message();
 				boolean moveSuccess; 
 				UnitState msgUnit = (UnitState)msg.get("unit");
+				int a = msgUnit.x;
+				int b = msgUnit.y;
+				int uid = msgUnit.unitID;
 				LoggingService.log(MessageType.moveUnit, "["+myServerName+"]"+"Game server received "+ request +" request for unitId " + msgUnit.unitID + "from server: " + origin);
-				unit = this.moveUnit(msgUnit, (Integer)msg.get("toX"), (Integer)msg.get("toY"));
+				unit = this.moveUnit(msgUnit, toX, toY);
 				moveSuccess = unit != null ? true : false;
+				
+				if(map[a][b] == null) {
+					LoggingService.log(MessageType.moveUnit,"["+ myServerName+"]"+ "moveRequest UnitId: "+uid
+							+" move from ["+a +","+b+"] old map is updated to null.");
+				}
+				else {
+					LoggingService.log(MessageType.moveUnit,"["+ myServerName+"]"+ "XXXXIt is ["+map[a][b].x +","+map[a][b].y+"]");
+				}
+				if(map[toX][toY] != null) {
+					LoggingService.log(MessageType.moveUnit,"["+ myServerName+"]"+ "moveRequest UnitId: "+uid
+							+" move to ["+toX +","+toY+"] new map is not null. It is ["+map[toX][toY].x +","+map[toX][toY].y+"]");
+				}
 				
 				//tell the player's request handling server (origin) that it's player's move request has been processed 
 				reply.put("id", msg.get("id"));
@@ -283,7 +332,8 @@ public class GameServer implements MessagingHandler {
 					sync.put("id", getNewSyncMessageId());
 					sync.put("request", MessageType.sync);
 					sync.put("type", MessageType.moveUnit);
-					sync.put("oldUnit", msgUnit);
+					sync.put("fromX", a);
+					sync.put("fromY", b);
 					sync.put("toX", unit.x);
 					sync.put("toY", unit.y);
 				}
@@ -347,13 +397,12 @@ public class GameServer implements MessagingHandler {
             //req handlers
             for(int i=0;i<numberOfReqServers;i++) {	
             	String s = "reqServer"+(i+1);
-            	Registry remoteRegistry  = LocateRegistry.getRegistry(ip, port);
+            	Registry remoteRegistry  = LocateRegistry.getRegistry(serverIps.get(s), port);
     			MessagingHandler reqServerHandle = (MessagingHandler) remoteRegistry.lookup(s);
     			requestHandlingServers.put(s, reqServerHandle);
-            }
-            
+            }         
             //backup req handler
-            Registry remoteRegistry  = LocateRegistry.getRegistry(ip, port);
+            Registry remoteRegistry  = LocateRegistry.getRegistry(serverIps.get("backupServerReq"), port);
             requestHandlingServers.put("backupServerReq", (MessagingHandler) remoteRegistry.lookup("backupServerReq"));
             
             //initialize battlefield
