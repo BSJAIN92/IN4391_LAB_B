@@ -49,6 +49,7 @@ public class RequestHandlingServer implements MessagingHandler {
 	private static RequestServerFailoverService reqFailoverService;
 	private static HashMap<String, String> serverIps;
 	public static HashMap<String, Long> timeSinceHeartbeat;
+	public static int numberOfPlayers;
 	
 	
 	private RequestHandlingServer(int width, int height){
@@ -308,6 +309,7 @@ public class RequestHandlingServer implements MessagingHandler {
 		try {
 			myServerName = args[0]; 
 			myServerNumber = Integer.parseInt(myServerName.split("_")[1]);
+			numberOfPlayers = Integer.parseInt(args[2]);
 			LocateRegistry.createRegistry(1099);
 			
 		} catch (RemoteException e) {
@@ -356,7 +358,7 @@ public class RequestHandlingServer implements MessagingHandler {
 			});
 			
 			//start a new thread to simulate player connections
-			PlayerConnectionSimulation sim = new PlayerConnectionSimulation(2, battlefield, myServerNumber);
+			PlayerConnectionSimulation sim = new PlayerConnectionSimulation(numberOfPlayers, battlefield, myServerNumber);
 			
 			/*HashMap<String, ArrayList<UnitState>> setupPlayers = (HashMap<String, ArrayList<UnitState>>) message.get("players");
 			setupPlayers.forEach((k,v)->{
