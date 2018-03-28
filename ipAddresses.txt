@@ -1,0 +1,4 @@
+gameServer 172.31.27.9
+backupServerReq 172.31.23.255
+reqServer1 172.31.17.211
+reqServer2 172.31.24.227

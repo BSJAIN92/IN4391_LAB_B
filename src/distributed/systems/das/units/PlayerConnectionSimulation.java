@@ -50,7 +50,7 @@ public class PlayerConnectionSimulation implements Runnable{
 	
 	private static List<PlayerDetails> listPlayers;
 	int noOfPlayers;
-	String file = "C:\\Users\\Apourva\\Documents\\DAS\\IN4391_LAB_B\\src\\distributed\\systems\\das\\config\\SC2_Edge_Detailed";
+	String file = "/home/ec2-user/SC2_Edge_Detailed";
 	RequestHandlingServer requestHandlingServer;
 	int serverNumber;
 	

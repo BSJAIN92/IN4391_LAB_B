@@ -1,3 +1,0 @@
-gameServer localhost
-backupServerReq localhost
-reqServer1 localhost

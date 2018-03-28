@@ -59,7 +59,7 @@ public class BackupGameServer implements MessagingHandler {
 	
 	private void createIpMap() {
 		serverIps = new HashMap<String, String>();
-		File ipFile = new File("C:\\Users\\Apourva\\Documents\\DAS\\IN4391_LAB_B\\src\\distributed\\systems\\das\\config\\ipAddresses.txt");
+		File ipFile = new File("/home/ec2-user/ipAddresses.txt");
 		try {
 			BufferedReader in = new BufferedReader(new FileReader(ipFile));
 			String line = null;

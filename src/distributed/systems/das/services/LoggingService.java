@@ -11,7 +11,7 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 
 public class LoggingService {
-	static String gamelogFile = "C:\\Users\\Apourva\\Documents\\DasLog\\GameLog.txt";
+	static String gamelogFile = "GameLog.txt";
 	final static Object lock = new Object();
 	
 	public static void log(MessageType messageType, String text) {
