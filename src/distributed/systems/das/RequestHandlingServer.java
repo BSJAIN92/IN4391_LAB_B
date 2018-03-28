@@ -22,6 +22,7 @@ import java.util.HashMap;
 import distributed.systems.das.common.Message;
 import distributed.systems.das.common.MessageType;
 import distributed.systems.das.common.UnitState;
+import distributed.systems.das.common.UnitType;
 import distributed.systems.das.services.ClientServer;
 import distributed.systems.das.services.HeartbeatService;
 import distributed.systems.das.services.LoggingService;
@@ -29,6 +30,7 @@ import distributed.systems.das.services.MessagingHandler;
 import distributed.systems.das.services.RequestServerFailoverService;
 import distributed.systems.das.units.Dragon;
 import distributed.systems.das.units.Player;
+import distributed.systems.das.units.PlayerConnectionSimulation;
 
 public class RequestHandlingServer implements MessagingHandler {
 	public int MAP_WIDTH;
@@ -39,6 +41,7 @@ public class RequestHandlingServer implements MessagingHandler {
 	//private static String gameServerIp = "localhost";
 	//private static String backupServerIp = "localhost";
 	private static String myServerName;
+	private static int myServerNumber;
 	private static int port = 1099; //we use default RMI Registry port
 	private static MessagingHandler gameServerHandle;
 	private static MessagingHandler backupReqServerHandle;
@@ -87,6 +90,19 @@ public class RequestHandlingServer implements MessagingHandler {
 		assert y >= 0 && x < map[0].length;
 
 		return map[x][y];
+	}
+	
+	private synchronized UnitState spawnUnit(int x, int y, int id, UnitType unitType, String origin)
+	{
+		UnitState unit = null; 
+		synchronized (this) {
+			if (map[x][y] == null) {
+				unit = new UnitState(x, y, id, unitType, origin);
+				map[x][y] = unit;
+				map[x][y].setPosition(x, y);
+			}
+		}
+		return unit;
 	}
 	
 	private synchronized UnitState moveUnit(UnitState unit, int newX, int newY)
@@ -174,6 +190,9 @@ public class RequestHandlingServer implements MessagingHandler {
 						toUnit.adjustHitPoints(unit.attackPoints);
 					}
 				}
+				else {
+					LoggingService.log(MessageType.healDamage, "Caoont heal damage because ["+toX+", "+toY+"] does not exist anymore.");
+				}
 			} catch (RemoteException e) {
 				e.printStackTrace();
 			}
@@ -203,7 +222,48 @@ public class RequestHandlingServer implements MessagingHandler {
 						toUnit.adjustHitPoints(-unit.attackPoints);
 					}
 				}
+				else {
+					LoggingService.log(MessageType.dealDamage, "Caoont deal damage because ["+toX+", "+toY+"] does not exist anymore.");
+				}
 			} catch (RemoteException e) {
+				e.printStackTrace();
+			}
+		}
+	}
+	
+	public synchronized void spawnUnitRequest(int unitId) {
+		int id;
+		Message spawnMessage;
+		synchronized(this) {
+			id = ++localMessageCounter;
+			spawnMessage = new Message();
+			spawnMessage.setMessageType(MessageType.spawnUnit);
+			spawnMessage.put("request", MessageType.spawnUnit);
+			spawnMessage.put("id", id);
+			spawnMessage.put("origin", myServerName);
+			spawnMessage.put("unitId", unitId);
+			String text = "["+ myServerName+"]"+ "Spawn new unit.";
+			LoggingService.log(MessageType.spawnUnit, text);
+			Message reply;
+			UnitState spawnedUnit;
+			try {
+				reply = gameServerHandle.onMessageReceived(spawnMessage);
+				if(reply!=null) {
+					UnitState unit = (UnitState)reply.get("unit");
+					synchronized(this) {
+						spawnedUnit = spawnUnit(unit.x, unit.y, unit.unitID, unit.unitType, unit.helperServerAddress);
+						if(spawnedUnit != null) {
+							LoggingService.log(MessageType.spawnUnit, "["+ myServerName+"]"+ 
+									"Spawned new unit at map ["+map[unit.x]+","+unit.y+"]");
+							Player p = new Player(spawnedUnit, battlefield, myServerName);
+						}
+						else {
+							LoggingService.log(MessageType.spawnUnit, "XXXXXXXXXXx");
+						}
+					}
+				}
+			} catch (RemoteException e) {
+				// TODO Auto-generated catch block
 				e.printStackTrace();
 			}
 		}
@@ -246,6 +306,7 @@ public class RequestHandlingServer implements MessagingHandler {
 	public static void main(String args[]) throws NotBoundException {	
 		try {
 			myServerName = args[0]; 
+			myServerNumber = Integer.parseInt(myServerName.split("_")[1]);
 			LocateRegistry.createRegistry(1099);
 			
 		} catch (RemoteException e) {
@@ -281,7 +342,8 @@ public class RequestHandlingServer implements MessagingHandler {
 			} catch (NotBoundException e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
-			}		
+			}
+			
 			HashMap<String, ArrayList<UnitState>> setupDragons = (HashMap<String, ArrayList<UnitState>>) message.get("dragons");
 			setupDragons.forEach((k,v)->{
 				v.forEach(u->{
@@ -291,7 +353,11 @@ public class RequestHandlingServer implements MessagingHandler {
 					}
 				});
 			});
-			HashMap<String, ArrayList<UnitState>> setupPlayers = (HashMap<String, ArrayList<UnitState>>) message.get("players");
+			
+			//start a new thread to simulate player connections
+			PlayerConnectionSimulation sim = new PlayerConnectionSimulation(2, battlefield, myServerNumber);
+			
+			/*HashMap<String, ArrayList<UnitState>> setupPlayers = (HashMap<String, ArrayList<UnitState>>) message.get("players");
 			setupPlayers.forEach((k,v)->{
 				v.forEach(u->{
 					placeUnitOnMap(u);
@@ -299,11 +365,12 @@ public class RequestHandlingServer implements MessagingHandler {
 						Player d = new Player(u, battlefield, myServerName);
 					}
 				});
-			});
+			});*/
 		}
 		return null;
 	}
 	
+	@Override
 	public synchronized void onSynchronizationMessageReceived(Message message) throws RemoteException {
 		if(message.get("request").equals(MessageType.sync)) {
 			UnitState u;

@@ -53,10 +53,10 @@ public class Player implements Runnable, Serializable{
 
 	@Override
 	public synchronized void run() {
+		LoggingService.log(MessageType.setup, "Player thread: "+ Thread.currentThread().getName() +" started");
 		running = true;
 		while(GameState.getRunningState() && this.running) {
 		if(serverName.contains("reqServer")) {
-			LoggingService.log(MessageType.setup, "Player thread: "+ Thread.currentThread().getName() +" started");
 			Direction direction;
 			UnitType adjacentUnitType;
 			int targetX = 0, targetY = 0;
@@ -210,9 +210,7 @@ public class Player implements Runnable, Serializable{
 				} catch (InterruptedException e) {
 					e.printStackTrace();
 				}
-			}//close else
-
-		
+			}//close else	
 		}//close while
 	}//close fun
 }//close class

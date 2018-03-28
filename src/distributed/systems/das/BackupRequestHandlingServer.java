@@ -98,6 +98,30 @@ public class BackupRequestHandlingServer implements MessagingHandler{
 		return null;
 	}
 	
+	private synchronized boolean putUnit(UnitState unit, int x, int y)
+	{
+		synchronized(this) {
+			if (map[x][y] != null)
+				return false;
+			map[x][y] = unit;
+			unit.setPosition(x, y);
+			return true;
+		}
+	}
+	
+	private synchronized UnitState spawnUnit(int x, int y, int id, UnitType unitType, String origin)
+	{
+		UnitState unit = null; 
+		synchronized (this) {
+			if (map[x][y] == null) {
+				unit = new UnitState(x, y, id, unitType, origin);
+				map[x][y] = unit;
+				map[x][y].setPosition(x, y);
+			}
+		}
+		return unit;
+	}
+	
 	private synchronized UnitState moveUnit(UnitState unit, int newX, int newY)
 	{
 		synchronized(this) {
@@ -245,6 +269,7 @@ public class BackupRequestHandlingServer implements MessagingHandler{
 		for(UnitState u : setupDragons.get(serverName)) {
 			ids.add(u.unitID);
 		}
+		//TODO
 		for(UnitState u : setupPlayers.get(serverName)) {
 			ids.add(u.unitID);
 		}
@@ -339,16 +364,16 @@ public class BackupRequestHandlingServer implements MessagingHandler{
 			setupDragons.forEach((k,v)->{
 				v.forEach(u -> placeUnitOnMap(u));
 			});
-			setupPlayers = (HashMap<String, ArrayList<UnitState>>) message.get("players");
+			/*setupPlayers = (HashMap<String, ArrayList<UnitState>>) message.get("players");
 			setupPlayers.forEach((k,v)->{
 				v.forEach(u -> placeUnitOnMap(u));
-			});
+			});*/
 		}
 		if(message.get("type").equals(MessageType.changeServer)) {
 			LoggingService.log(MessageType.changeServer, "["+ myServerName+"]"+"In main server failure scenario.");
 			//get the name of the backup server
 			String backupServerName = message.get("serverName").toString();
-			String backupServerIpAddress = message.get("ipAddress").toString();
+			String backupServerIpAddress = serverIps.get(backupServerName);
 			
 			//change RMI to call backup server method
 			try {
@@ -376,7 +401,14 @@ public class BackupRequestHandlingServer implements MessagingHandler{
 			case spawnUnit:
 				u = (UnitState) message.get("unit");
 				synchronized(this) {
-					map[u.x][u.y] = u;
+					putUnit(u, u.x, u.y);
+					if(map[u.x][u.y] != null) {
+						LoggingService.log(MessageType.spawnUnit, "["+ myServerName+"]"+ 
+								"Spawned new unit at map ["+map[u.x]+","+u.y+"]");
+					}
+					else {
+						LoggingService.log(MessageType.spawnUnit, "XXXXXXXXXXx");
+					}
 				}
 				break;
 			case dealDamage:

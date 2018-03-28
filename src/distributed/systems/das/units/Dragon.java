@@ -56,10 +56,10 @@ public class Dragon implements Runnable{
 	 * specific enemy.
 	 */
 	public synchronized void run() {
+		LoggingService.log(MessageType.setup, "Dragon thread: "+ Thread.currentThread().getName() +" started");
 		while(GameState.getRunningState()) {
-		if(serverName.contains("reqServer")) {
-			LoggingService.log(MessageType.setup, "Dragon thread: "+ Thread.currentThread().getName() +" started");
-			ArrayList<Direction> adjacentPlayers = new ArrayList<Direction> ();		
+		ArrayList<Direction> adjacentPlayers = new ArrayList<Direction> ();
+		if(serverName.contains("reqServer")) {		
 				try {
 					/* Sleep while the dragon is considering its next move */
 					Thread.currentThread().sleep((int)(timeBetweenTurns * GameState.GAME_SPEED));
@@ -119,8 +119,7 @@ public class Dragon implements Runnable{
 				}
 			}//if
 		else {
-			LoggingService.log(MessageType.setup, "Dragon thread: "+ Thread.currentThread().getName() +" started");
-			ArrayList<Direction> adjacentPlayers = new ArrayList<Direction> ();		
+			LoggingService.log(MessageType.setup, "Dragon thread: "+ Thread.currentThread().getName() +" started");		
 				try {
 					/* Sleep while the dragon is considering its next move */
 					Thread.currentThread().sleep((int)(timeBetweenTurns * GameState.GAME_SPEED));
