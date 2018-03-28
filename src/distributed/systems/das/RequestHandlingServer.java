@@ -304,13 +304,14 @@ public class RequestHandlingServer implements MessagingHandler {
 		return;
 	}
 	public static void main(String args[]) throws NotBoundException {	
+		String bkName = "backupServerReq";
 		try {
 			myServerName = args[0]; 
 			myServerNumber = Integer.parseInt(myServerName.split("_")[1]);
 			LocateRegistry.createRegistry(1099);
 			
 		} catch (RemoteException e) {
-			//e.printStackTrace();
+			e.printStackTrace();
 		}
 		MessagingHandler reqHandlingServer = getRequestHandlingServer();
         MessagingHandler reqHandlingServerStub;
@@ -318,9 +319,9 @@ public class RequestHandlingServer implements MessagingHandler {
 			reqHandlingServerStub = (MessagingHandler) UnicastRemoteObject.exportObject(reqHandlingServer, 0);
 			Registry registry = LocateRegistry.getRegistry();
 	        registry.rebind(myServerName, reqHandlingServerStub);
-	        Registry backupRegistry = LocateRegistry.getRegistry(serverIps.get("backupReqServer"));
+	        Registry backupRegistry = LocateRegistry.getRegistry(serverIps.get(bkName));
 	        LoggingService.log(MessageType.setup, "["+ myServerName+"]" +" remote object registered.");
-	        backupReqServerHandle = (MessagingHandler) backupRegistry.lookup("backupServerReq");
+	        backupReqServerHandle = (MessagingHandler) backupRegistry.lookup(bkName);
 	        heartbeat = new HeartbeatService(backupReqServerHandle, myServerName);
 	        LoggingService.log(MessageType.setup, "["+ myServerName+"]"+"Backup request server handle obtained.");
 		} catch (RemoteException e) {
