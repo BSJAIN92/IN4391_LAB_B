@@ -259,23 +259,22 @@ public class GameServer implements MessagingHandler {
 				int y = (Integer)msg.get("toY");
 				Integer damagePoints = (Integer)msg.get("damagePoints");
 				unit = battlefield.getUnit(x, y);
-				LoggingService.log(MessageType.dealDamage, "["+myServerName+"]"+"Game server received "+ request +" request for unitId " + unit.unitID + "from server: " + origin);
 				if (unit != null) {
+					LoggingService.log(MessageType.dealDamage, "["+myServerName+"]"+"Game server received "+ request +" request for unitId " + unit.unitID + "from server: " + origin);
 					unit.adjustHitPoints(-damagePoints );
-				
-				//tell the player's request handling server (origin) that it's player's health has changed
-				reply = new Message();
-				reply.put("id", msg.get("id"));
-				reply.put("unit", unit);
-				
-				//tell all other request handling servers (servers != origin) that a player's health has changed
-				sync = new Message();
-				sync.put("id", getNewSyncMessageId());
-				sync.put("request", MessageType.sync);
-				sync.put("type", MessageType.dealDamage);
-				sync.put("x", unit.x);	
-				sync.put("y", unit.y);
-				sync.put("damagePoints", damagePoints);
+					//tell the player's request handling server (origin) that it's player's health has changed
+					reply = new Message();
+					reply.put("id", msg.get("id"));
+					reply.put("unit", unit);
+					
+					//tell all other request handling servers (servers != origin) that a player's health has changed
+					sync = new Message();
+					sync.put("id", getNewSyncMessageId());
+					sync.put("request", MessageType.sync);
+					sync.put("type", MessageType.dealDamage);
+					sync.put("x", unit.x);	
+					sync.put("y", unit.y);
+					sync.put("damagePoints", damagePoints);
 				}
 				break;
 			}
@@ -285,23 +284,24 @@ public class GameServer implements MessagingHandler {
 				int y = (Integer)msg.get("toY");
 				int healPoints = (Integer)msg.get("healedPoints"); 
 				unit = battlefield.getUnit(x, y);
-				LoggingService.log(MessageType.healDamage, "["+myServerName+"]"+"Game server received "+ request +" request for unitId " + unit.unitID + "from server: " + origin);
-				if (unit != null)
+				if (unit != null) {
+					LoggingService.log(MessageType.healDamage, "["+myServerName+"]"+"Game server received "+ request +" request for unitId " + unit.unitID + "from server: " + origin);
 					unit.adjustHitPoints(healPoints);
-				
-				//tell the player's request handling server (origin) that it's player's health has changed
-				reply = new Message();
-				reply.put("id", msg.get("id"));
-				reply.put("unit", unit);
-				
-				//tell all other request handling servers (servers != origin) that a player's health has changed
-				sync = new Message();
-				sync.put("id", getNewSyncMessageId());
-				sync.put("request", MessageType.sync);
-				sync.put("type", MessageType.healDamage);
-				sync.put("x", unit.x);
-				sync.put("y", unit.y);
-				sync.put("healedPoints", healPoints);				
+					
+					//tell the player's request handling server (origin) that it's player's health has changed
+					reply = new Message();
+					reply.put("id", msg.get("id"));
+					reply.put("unit", unit);
+					
+					//tell all other request handling servers (servers != origin) that a player's health has changed
+					sync = new Message();
+					sync.put("id", getNewSyncMessageId());
+					sync.put("request", MessageType.sync);
+					sync.put("type", MessageType.healDamage);
+					sync.put("x", unit.x);
+					sync.put("y", unit.y);
+					sync.put("healedPoints", healPoints);
+				}				
 				break;
 			}
 			case moveUnit:
@@ -391,11 +391,10 @@ public class GameServer implements MessagingHandler {
 	
 	public static void main(String args[]) throws NotBoundException {
 		myServerName = args[0];
-		String ip = "localhost";
 		int port = 1099;
 		numberOfReqServers = Integer.parseInt(args[1]);
 		try {
-			//LocateRegistry.createRegistry(port);
+			LocateRegistry.createRegistry(port);
             MessagingHandler gameServer = new GameServer();
             MessagingHandler gameServerStub = (MessagingHandler) UnicastRemoteObject.exportObject(gameServer, 0);
             Registry registry = LocateRegistry.getRegistry();

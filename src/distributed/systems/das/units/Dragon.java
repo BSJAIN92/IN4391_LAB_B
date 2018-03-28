@@ -58,15 +58,16 @@ public class Dragon implements Runnable{
 	public synchronized void run() {
 		LoggingService.log(MessageType.setup, "Dragon thread: "+ Thread.currentThread().getName() +" started");
 		while(GameState.getRunningState()) {
-		ArrayList<Direction> adjacentPlayers = new ArrayList<Direction> ();
-		if(serverName.contains("reqServer")) {		
+			/* Stop if the dragon runs out of hitpoints */
+			if(unit.hitPoints <= 0) {
+				LoggingService.log(MessageType.setup, "Dragon thread: "+ Thread.currentThread().getName() +" is being killed for unitId: "+unit.unitID);
+				return;
+			}
+			ArrayList<Direction> adjacentPlayers = new ArrayList<Direction> ();
+			if(serverName.contains("reqServer")) {		
 				try {
 					/* Sleep while the dragon is considering its next move */
 					Thread.currentThread().sleep((int)(timeBetweenTurns * GameState.GAME_SPEED));
-
-					/* Stop if the dragon runs out of hitpoints */
-					if (unit.hitPoints <= 0)
-						break;
 
 					// Decide what players are near
 					if (unit.y > 0) {
@@ -123,10 +124,6 @@ public class Dragon implements Runnable{
 				try {
 					/* Sleep while the dragon is considering its next move */
 					Thread.currentThread().sleep((int)(timeBetweenTurns * GameState.GAME_SPEED));
-
-					/* Stop if the dragon runs out of hitpoints */
-					if (unit.hitPoints <= 0)
-						break;
 
 					// Decide what players are near
 					if (unit.y > 0) {

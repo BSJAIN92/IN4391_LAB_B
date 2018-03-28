@@ -56,6 +56,10 @@ public class Player implements Runnable, Serializable{
 		LoggingService.log(MessageType.setup, "Player thread: "+ Thread.currentThread().getName() +" started");
 		running = true;
 		while(GameState.getRunningState() && this.running) {
+		if(unit.hitPoints <= 0) {
+			LoggingService.log(MessageType.setup, "Player thread: "+ Thread.currentThread().getName() +" is being killed for unitId: "+unit.unitID);
+			return;
+		}
 		if(serverName.contains("reqServer")) {
 			Direction direction;
 			UnitType adjacentUnitType;

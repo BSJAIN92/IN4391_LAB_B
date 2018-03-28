@@ -60,8 +60,7 @@ public class UnitState implements Serializable{
 	public synchronized int adjustHitPoints(int modifier) {
 		hitPoints += modifier;
 		if (hitPoints > MAX_HITPOINTS)
-			hitPoints = MAX_HITPOINTS;
-		
+			hitPoints = MAX_HITPOINTS;	
 		return hitPoints;		
 	}	
 }

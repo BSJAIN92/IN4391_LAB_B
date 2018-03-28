@@ -454,7 +454,17 @@ public class RequestHandlingServer implements MessagingHandler {
 		}		
 	}
 	
-	
+	public synchronized UnitState killPlayer(int x, int y) {
+		UnitState u;
+		u = getUnit(x, y);
+		if(u.hitPoints <= 0) {
+			synchronized(this) {
+				removeUnit(x, y);
+				u = null;
+			}
+		}
+		return u;
+	}
 	public Message onHeartbeatReceived(Message msg) {		
 		Message reply = null;	
 		String name = msg.get("serverName").toString();
