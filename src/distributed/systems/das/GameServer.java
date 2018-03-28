@@ -36,6 +36,7 @@ public class GameServer implements MessagingHandler {
 	private static HashMap<String, ArrayList<UnitState>> setupDragons = new HashMap<String, ArrayList<UnitState>>();
 	private static HashMap<String, ArrayList<UnitState>> setupPlayers = new HashMap<String, ArrayList<UnitState>>();
 	private static HashMap<String, String> serverIps;
+	private static int numberOfDragons;
 	
 	private GameServer() {
 		map = new UnitState[MAP_WIDTH][MAP_HEIGHT];
@@ -393,6 +394,7 @@ public class GameServer implements MessagingHandler {
 		myServerName = args[0];
 		int port = 1099;
 		numberOfReqServers = Integer.parseInt(args[1]);
+		numberOfDragons = Integer.parseInt(args[2]);
 		try {
 			LocateRegistry.createRegistry(port);
             MessagingHandler gameServer = new GameServer();
@@ -416,7 +418,7 @@ public class GameServer implements MessagingHandler {
             battlefield = GameServer.getBattleField();            
             
             //initialize dragons
-            initializeDragons(5);
+            initializeDragons(numberOfDragons);
             
             //initialize players
             //initializePlayers(10, 5);
