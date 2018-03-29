@@ -160,7 +160,7 @@ public class BackupGameServer implements MessagingHandler {
 	}
 	
 	@Override
-	public Message onMessageReceived(Message msg) throws RemoteException {
+	public synchronized Message onMessageReceived(Message msg) throws RemoteException {
 		if(msg.get("type").equals(MessageType.setup)) {
 			LoggingService.log(MessageType.setup, "["+ myServerName+"]"+"Backup server received player and dragon setup message from gameServer.");
 			try {
@@ -367,7 +367,7 @@ public class BackupGameServer implements MessagingHandler {
 		return reply;
 	}
 	
-	public Message onHeartbeatReceived(Message msg) {
+	public synchronized Message onHeartbeatReceived(Message msg) {
 		Message reply = null;	
 		String name = msg.get("serverName").toString();
 		String text = "["+ myServerName+"]"+"Received heartbeat from " +  name;
@@ -427,6 +427,8 @@ public class BackupGameServer implements MessagingHandler {
             
             //initialize battlefield
             battlefield = BackupGameServer.getBattleField();            
+            
+            
             
 		} catch (RemoteException e) {
 			// TODO Auto-generated catch block

@@ -400,14 +400,18 @@ public class BackupRequestHandlingServer implements MessagingHandler{
 			switch(messageType) {
 			case spawnUnit:
 				u = (UnitState) message.get("unit");
+				x = (Integer)message.get("x");
+				y = (Integer)message.get("y");
 				synchronized(this) {
-					putUnit(u, u.x, u.y);
-					if(map[u.x][u.y] != null) {
-						LoggingService.log(MessageType.spawnUnit, "["+ myServerName+"]"+ 
-								"Spawned new unit at map ["+map[u.x]+","+u.y+"]");
+					if(u == null) {
+						LoggingService.log(MessageType.spawnUnit, "["+ myServerName+"]"+"Unit to create in NULL");
 					}
 					else {
-						LoggingService.log(MessageType.spawnUnit, "XXXXXXXXXXx");
+						UnitState oldUnit = getUnit(x, y);
+						if(oldUnit != null) {
+							putUnit(oldUnit, u.x, u.y);
+							LoggingService.log(MessageType.spawnUnit, "["+ myServerName+"]"+"Unit spawned: "+map[x][y].unitID);
+						}
 					}
 				}
 				break;
@@ -415,21 +419,21 @@ public class BackupRequestHandlingServer implements MessagingHandler{
 				x = (Integer)message.get("x");
 				y = (Integer)message.get("y");
 				Integer damagePoints = (Integer)message.get("damagePoints");
-				u = (UnitState) message.get("unit");
 				u = this.getUnit(x, y);
 				if (u != null) {
 					synchronized(this) {
+						LoggingService.log(MessageType.dealDamage, "["+ myServerName+"]"+"DealDamage to: "+map[x][y].unitID);
 						u.adjustHitPoints(-damagePoints );
 					}
 				}
 				break;
 			case healDamage:
-				u = (UnitState) message.get("unit");
 				x = (int)message.get("x");
 				y = (int)message.get("y");
 				u = this.getUnit(x, y);
 				if (u != null)
 					synchronized(this) {
+						LoggingService.log(MessageType.healDamage, "["+ myServerName+"]"+"Heal Damage to: "+map[x][y].unitID);
 						u.adjustHitPoints((Integer)message.get("healedPoints") );
 					}
 				break;

@@ -126,6 +126,17 @@ public class RequestHandlingServer implements MessagingHandler {
 		}
 	}
 	
+	private synchronized boolean putUnit(UnitState unit, int x, int y)
+	{
+		synchronized(this) {
+			if (map[x][y] != null)
+				return false;
+			map[x][y] = unit;
+			unit.setPosition(x, y);
+			return true;
+		}
+	}
+	
 	private synchronized void removeUnit(int x, int y)
 	{
 		synchronized(this) {
@@ -360,15 +371,6 @@ public class RequestHandlingServer implements MessagingHandler {
 			//start a new thread to simulate player connections
 			PlayerConnectionSimulation sim = new PlayerConnectionSimulation(numberOfPlayers, battlefield, myServerNumber);
 			
-			/*HashMap<String, ArrayList<UnitState>> setupPlayers = (HashMap<String, ArrayList<UnitState>>) message.get("players");
-			setupPlayers.forEach((k,v)->{
-				v.forEach(u->{
-					placeUnitOnMap(u);
-					if(u.helperServerAddress.equals(myServerName)) {
-						Player d = new Player(u, battlefield, myServerName);
-					}
-				});
-			});*/
 		}
 		return null;
 	}
@@ -384,29 +386,40 @@ public class RequestHandlingServer implements MessagingHandler {
 			switch(messageType) {
 			case spawnUnit:
 				u = (UnitState) message.get("unit");
+				x = (Integer)message.get("x");
+				y = (Integer)message.get("y");
 				synchronized(this) {
-					map[u.x][u.y] = u;
+					if(u == null) {
+						LoggingService.log(MessageType.spawnUnit, "["+ myServerName+"]"+"Unit to create in NULL");
+					}
+					else {
+						UnitState oldUnit = getUnit(x, y);
+						if(oldUnit != null) {
+							putUnit(oldUnit, u.x, u.y);
+							LoggingService.log(MessageType.spawnUnit, "["+ myServerName+"]"+"Unit spawned: "+map[x][y].unitID);
+						}
+					}
 				}
 				break;
 			case dealDamage:
 				x = (Integer)message.get("x");
 				y = (Integer)message.get("y");
 				Integer damagePoints = (Integer)message.get("damagePoints");
-				u = (UnitState) message.get("unit");
 				u = this.getUnit(x, y);
 				if (u != null) {
 					synchronized(this) {
+						LoggingService.log(MessageType.dealDamage, "["+ myServerName+"]"+"DealDamage to: "+map[x][y].unitID);
 						u.adjustHitPoints(-damagePoints );
 					}
 				}
 				break;
 			case healDamage:
-				u = (UnitState) message.get("unit");
 				x = (int)message.get("x");
 				y = (int)message.get("y");
 				u = this.getUnit(x, y);
 				if (u != null)
 					synchronized(this) {
+						LoggingService.log(MessageType.healDamage, "["+ myServerName+"]"+"Heal Damage to: "+map[x][y].unitID);
 						u.adjustHitPoints((Integer)message.get("healedPoints") );
 					}
 				break;
