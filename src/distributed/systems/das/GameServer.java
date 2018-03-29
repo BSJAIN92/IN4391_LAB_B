@@ -192,19 +192,21 @@ public class GameServer implements MessagingHandler {
 				
 				int newUid = Integer.parseInt(msg.get("unitId").toString());
 				unit = this.spawnUnit(rx, ry, newUid, UnitType.Player, origin);
-				LoggingService.log(MessageType.spawnUnit, "["+myServerName+"]"+"Game server received "+ request +" request for unitId " + unit.unitID + "from server: " + origin);
-				reply = new Message();
-				reply.put("id", msg.get("id"));
-				reply.put("unit", unit);
-				
-				//tell all other request handling servers that a new unit has spawned
-				sync = new Message();
-				sync.put("id", getNewSyncMessageId());
-				sync.put("request", MessageType.sync);
-				sync.put("type", MessageType.spawnUnit);
-				sync.put("x", rx);	
-				sync.put("y", ry);
-				sync.put("unit", unit);	
+				if(unit != null) {
+					LoggingService.log(MessageType.spawnUnit, "["+myServerName+"]"+"Game server received "+ request +" request for unitId " + unit.unitID + "from server: " + origin);
+					reply = new Message();
+					reply.put("id", msg.get("id"));
+					reply.put("unit", unit);
+					
+					//tell all other request handling servers that a new unit has spawned
+					sync = new Message();
+					sync.put("id", getNewSyncMessageId());
+					sync.put("request", MessageType.sync);
+					sync.put("type", MessageType.spawnUnit);
+					sync.put("x", rx);	
+					sync.put("y", ry);
+					sync.put("unit", unit);
+				}	
 				break;
 			case getUnit:
 			{
