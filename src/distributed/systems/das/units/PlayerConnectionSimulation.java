@@ -10,6 +10,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 
+import distributed.systems.das.BackupRequestHandlingServer;
 import distributed.systems.das.GameServer;
 import distributed.systems.das.RequestHandlingServer;
 import distributed.systems.das.common.Message;
@@ -52,6 +53,7 @@ public class PlayerConnectionSimulation implements Runnable{
 	int noOfPlayers;
 	String file = "SC2_Edge_Detailed";
 	RequestHandlingServer requestHandlingServer;
+	BackupRequestHandlingServer backupRequestHandlingServer;
 	int serverNumber;
 	
 	Thread simThread;
@@ -77,37 +79,81 @@ public class PlayerConnectionSimulation implements Runnable{
 					return 0;
 				}
 			}
-		});
+		});		
+		simThread = new Thread(this);
+		simThread.start();
+	}
+	
+	public PlayerConnectionSimulation(int noOfPlayers, BackupRequestHandlingServer server, int serverNumber) {
 		
+		LoggingService.log(MessageType.spawnUnit, "in GTA");
+		this.noOfPlayers = noOfPlayers;
+		this.backupRequestHandlingServer = server;
+		this.serverNumber = serverNumber;
 		
+		listPlayers = getPlayersList(file);
 		
+		Collections.sort(listPlayers, new Comparator<PlayerDetails>() {
+			public int compare(PlayerDetails p1, PlayerDetails p2) {
+				if(p1.getTimestamp() > p2.getTimestamp()) {
+					return 1;
+				}
+				else if(p1.getTimestamp() < p2.getTimestamp()) {
+					return -1;
+				}
+				else {
+					return 0;
+				}
+			}
+		});		
 		simThread = new Thread(this);
 		simThread.start();
 	}
 	
 	@Override
 	public synchronized void run() {
-		LoggingService.log(MessageType.spawnUnit, "[reqServer_"+ serverNumber +"]"+"in GTA run");
-		int start = serverNumber*noOfPlayers;
-		int end =  start + noOfPlayers;
-		for (int i = start; i < end; i++) {
-			int id = listPlayers.get(i-1).getId();
-			
-			LoggingService.log(MessageType.setup, "[reqServer_"+ serverNumber +"]"+"Player Number: " + id);
-			long sleepTime = (long) (listPlayers.get(i).getTimestamp() - listPlayers.get(i-1).getTimestamp());
-			LoggingService.log(MessageType.setup, "[reqServer_"+ serverNumber +"]"+"Sleep for: " + sleepTime);
-			(new Thread() {
-				public void run() {
-					try {
-						Thread.sleep(sleepTime);
-						requestHandlingServer.spawnUnitRequest(id);
-					} catch (InterruptedException e) {
-						// TODO Auto-generated catch block
-						e.printStackTrace();
+		if(requestHandlingServer != null) {
+			LoggingService.log(MessageType.spawnUnit, "[reqServer_"+ serverNumber +"]"+"in GTA run");
+			int start = serverNumber*noOfPlayers;
+			int end =  start + noOfPlayers;
+			for (int i = start; i < end; i++) {
+				int id = listPlayers.get(i-1).getId();
+				
+				LoggingService.log(MessageType.setup, "[reqServer_"+ serverNumber +"]"+"Player Number: " + id);
+				long sleepTime = (long) (listPlayers.get(i).getTimestamp() - listPlayers.get(i-1).getTimestamp());
+				LoggingService.log(MessageType.setup, "[reqServer_"+ serverNumber +"]"+"Sleep for: " + sleepTime);
+				(new Thread() {
+					public void run() {
+						try {
+							Thread.sleep(sleepTime);
+							requestHandlingServer.spawnUnitRequest(id);
+						} catch (InterruptedException e) {
+							// TODO Auto-generated catch block
+							e.printStackTrace();
+						}
 					}
-				}
-			}) .start();
-		}	
+				}) .start();
+			}	
+		}
+		if(backupRequestHandlingServer != null) {
+			int start = serverNumber*noOfPlayers;
+			int end =  start + noOfPlayers;
+			for (int i = start; i < end; i++) {
+				int id = listPlayers.get(i-1).getId();
+				long sleepTime = (long) (listPlayers.get(i).getTimestamp() - listPlayers.get(i-1).getTimestamp());
+				(new Thread() {
+					public void run() {
+						try {
+							Thread.sleep(sleepTime);
+							backupRequestHandlingServer.spawnUnitRequest(id);
+						} catch (InterruptedException e) {
+							// TODO Auto-generated catch block
+							e.printStackTrace();
+						}
+					}
+				}) .start();
+			}	
+		}
 	}
 	
 	private List<PlayerDetails> getPlayersList(String file){

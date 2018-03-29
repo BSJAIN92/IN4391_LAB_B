@@ -30,6 +30,7 @@ import distributed.systems.das.services.MessagingHandler;
 import distributed.systems.das.services.RequestServerFailoverService;
 import distributed.systems.das.units.Dragon;
 import distributed.systems.das.units.Player;
+import distributed.systems.das.units.PlayerConnectionSimulation;
 
 public class BackupRequestHandlingServer implements MessagingHandler{
 	public int MAP_WIDTH;
@@ -37,6 +38,7 @@ public class BackupRequestHandlingServer implements MessagingHandler{
 	public UnitState[][] map;
 	private int localMessageCounter = 0;
 
+	private static int noOfPlayers;
 	private static BackupRequestHandlingServer battlefield;
 	//private static String gameServerIp = "localhost";
 	//private static String backupServerIp = "localhost";
@@ -59,6 +61,7 @@ public class BackupRequestHandlingServer implements MessagingHandler{
 		createIpMap();	
 	}
 	private void createIpMap() {
+		//File ipFile = new File("ipAddresses.txt");
 		File ipFile = new File("/home/ec2-user/ipAddresses.txt");
 		serverIps = new HashMap<String, String>();
 		try {
@@ -261,6 +264,45 @@ public class BackupRequestHandlingServer implements MessagingHandler{
 		}
 	}
 	
+	public synchronized void spawnUnitRequest(int unitId) {
+		int id;
+		Message spawnMessage;
+		synchronized(this) {
+			id = ++localMessageCounter;
+			spawnMessage = new Message();
+			spawnMessage.setMessageType(MessageType.spawnUnit);
+			spawnMessage.put("request", MessageType.spawnUnit);
+			spawnMessage.put("id", id);
+			spawnMessage.put("origin", myServerName);
+			spawnMessage.put("unitId", unitId);
+			String text = "["+ myServerName+"]"+ "Spawn new unit.";
+			LoggingService.log(MessageType.spawnUnit, text);
+			Message reply;
+			UnitState spawnedUnit;
+			try {
+				reply = gameServerHandle.onMessageReceived(spawnMessage);
+				if(reply!=null) {
+					UnitState unit = (UnitState)reply.get("unit");
+					synchronized(this) {
+						spawnedUnit = spawnUnit(unit.x, unit.y, unit.unitID, unit.unitType, unit.helperServerAddress);
+						if(spawnedUnit != null) {
+							LoggingService.log(MessageType.spawnUnit, "["+ myServerName+"]"+ 
+									"Spawned new unit at map ["+map[unit.x]+","+unit.y+"]");
+							Player p = new Player(spawnedUnit, battlefield, myServerName);
+						}
+						else {
+							LoggingService.log(MessageType.spawnUnit, "XXXXXXXXXXx");
+						}
+					}
+				}
+			} catch (RemoteException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+		}
+	}
+	
+	
 	public synchronized void processServerFailure(String serverName) {
 		LoggingService.log(MessageType.changeServer, "["+ myServerName+"]"+"Backup server is in process Server Failure method.");
 		//spawn players and dragons in backup server
@@ -270,9 +312,9 @@ public class BackupRequestHandlingServer implements MessagingHandler{
 			ids.add(u.unitID);
 		}
 		//TODO
-		for(UnitState u : setupPlayers.get(serverName)) {
+		/*for(UnitState u : setupPlayers.get(serverName)) {
 			ids.add(u.unitID);
-		}
+		}*/
 		LoggingService.log(MessageType.changeServer, "["+ myServerName+"]"+"Process Server Failure. Start Ids: "+ ids.size());
 		units = getUnitsFromUnitIds(ids);
 		LoggingService.log(MessageType.changeServer, "["+ myServerName+"]"+"Process Server Failure. Start Units: "+ units.size());
@@ -280,12 +322,13 @@ public class BackupRequestHandlingServer implements MessagingHandler{
 			if(u.unitType == UnitType.Dragon){
 				LoggingService.log(MessageType.changeServer, "["+ myServerName+"]"+"Process Server Failure. Start Dragon: "+ u.unitID);
 				Dragon d = new Dragon(u, battlefield, myServerName);
-			}
-			if(u.unitType == UnitType.Player) {
-				LoggingService.log(MessageType.changeServer, "["+ myServerName+"]"+"Process Server Failure. Start Player: "+ u.unitID);
-				Player p = new Player(u, battlefield, myServerName);
 			}			
-		}			
+		}	
+		
+		//Player p = new Player(u, battlefield, myServerName);
+		int sno = Integer.parseInt(serverName.split("_")[1]);
+		new PlayerConnectionSimulation(noOfPlayers, battlefield, sno);
+		
 		//send information of failure to main game server and backup game server
 		Message msg = new Message();
 		int id = ++localMessageCounter;
@@ -327,6 +370,7 @@ public class BackupRequestHandlingServer implements MessagingHandler{
 	public static void main(String args[]) throws NotBoundException {	
 		try {
 			myServerName = args[0]; 
+			noOfPlayers = Integer.parseInt(args[1]);
 			LocateRegistry.createRegistry(1099);
 			
 		} catch (RemoteException e) {

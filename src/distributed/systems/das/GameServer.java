@@ -55,6 +55,7 @@ public class GameServer implements MessagingHandler {
 	
 	private void createIpMap() {
 		serverIps = new HashMap<String, String>();
+		//File ipFile = new File("ipAddresses.txt");
 		File ipFile = new File("/home/ec2-user/ipAddresses.txt");
 		try {
 			BufferedReader in = new BufferedReader(new FileReader(ipFile));
