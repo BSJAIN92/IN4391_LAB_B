@@ -59,7 +59,7 @@ public class BackupGameServer implements MessagingHandler {
 	
 	private void createIpMap() {
 		serverIps = new HashMap<String, String>();
-		File ipFile = new File("/home/ec2-user/ipAddresses.txt");
+		File ipFile = new File("ipAddresses.txt");
 		try {
 			BufferedReader in = new BufferedReader(new FileReader(ipFile));
 			String line = null;
@@ -407,7 +407,12 @@ public class BackupGameServer implements MessagingHandler {
 		int port = 1099;
 		numberOfReqServers = Integer.parseInt(args[1]);
 		try {
-			//LocateRegistry.createRegistry(port);
+			LocateRegistry.createRegistry(port);
+		} catch (RemoteException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		try {
             MessagingHandler gameServer = new BackupGameServer();
             MessagingHandler gameServerStub = (MessagingHandler) UnicastRemoteObject.exportObject(gameServer, 0);
             Registry registry = LocateRegistry.getRegistry();

@@ -55,7 +55,7 @@ public class GameServer implements MessagingHandler {
 	
 	private void createIpMap() {
 		serverIps = new HashMap<String, String>();
-		File ipFile = new File("/home/ec2-user/ipAddresses.txt");
+		File ipFile = new File("ipAddresses.txt");
 		try {
 			BufferedReader in = new BufferedReader(new FileReader(ipFile));
 			String line = null;
@@ -375,56 +375,63 @@ public class GameServer implements MessagingHandler {
 		String bkname = "backupServerGame";
 		try {
 			LocateRegistry.createRegistry(port);
-            MessagingHandler gameServer = new GameServer();
-            MessagingHandler gameServerStub = (MessagingHandler) UnicastRemoteObject.exportObject(gameServer, 0);
-            Registry registry = LocateRegistry.getRegistry();
-            registry.rebind(myServerName, gameServerStub);
-            LoggingService.log(MessageType.setup, "["+ myServerName+"]"+"game server registry created.");
-            
-            Registry bkRegistry  = LocateRegistry.getRegistry(serverIps.get(bkname), port);
-            MessagingHandler backupGameServerHandle = (MessagingHandler) bkRegistry.lookup(bkname);
-	        heartbeat = new HeartbeatService(backupGameServerHandle, myServerName);
-	        LoggingService.log(MessageType.setup, "["+ myServerName+"]"+"Backup request server handle obtained.");
-            
-            //req handlers
-            for(int i=0;i<numberOfReqServers;i++) {	
-            	String s = "reqServer_"+(i+1);
-            	Registry remoteRegistry  = LocateRegistry.getRegistry(serverIps.get(s), port);
-    			MessagingHandler reqServerHandle = (MessagingHandler) remoteRegistry.lookup(s);
-    			requestHandlingServers.put(s, reqServerHandle);
-            }         
-            //backup req handler
-            Registry remoteRegistry  = LocateRegistry.getRegistry(serverIps.get("backupServerReq"), port);
-            requestHandlingServers.put("backupServerReq", (MessagingHandler) remoteRegistry.lookup("backupServerReq"));
-            requestHandlingServers.put("backupServerGame", (MessagingHandler) bkRegistry.lookup("backupServerGame"));
-            
-            //initialize battlefield
-            battlefield = GameServer.getBattleField();            
-            
-            //initialize dragons
-            initializeDragons(numberOfDragons);
-
-            //send this info to respective servers
-            requestHandlingServers.forEach((serverName, handler) -> {
-				try {
-					Message setupMessage = new Message();
-					setupMessage.put("id", 0);
-					setupMessage.put("dragons", setupDragons);
-					setupMessage.put("type", MessageType.setup);
-					LoggingService.log(MessageType.setup, "["+ myServerName+"]"+"Game server: send player and dragon setup message to "+serverName);
-					handler.onMessageReceived(setupMessage);
-				} catch (RemoteException e) {
-					// TODO Auto-generated catch block
-					e.printStackTrace();
-				}
-			});
-            
-            
-		} catch (RemoteException e) {
-			// TODO Auto-generated catch block
-			//e.printStackTrace();
 		}
-	}
+		catch (RemoteException e) {
+				// TODO Auto-generated catch block
+				//e.printStackTrace();
+		}
+			
+         MessagingHandler gameServer = new GameServer();
+         MessagingHandler gameServerStub;
+		try {
+			gameServerStub = (MessagingHandler) UnicastRemoteObject.exportObject(gameServer, 0);
+			Registry registry = LocateRegistry.getRegistry();
+	         registry.rebind(myServerName, gameServerStub);
+	         LoggingService.log(MessageType.setup, "["+ myServerName+"]"+"game server registry created.");
+	          
+	         Registry bkRegistry  = LocateRegistry.getRegistry(serverIps.get(bkname), port);
+	         MessagingHandler backupGameServerHandle = (MessagingHandler) bkRegistry.lookup(bkname);
+		     heartbeat = new HeartbeatService(backupGameServerHandle, myServerName);
+		     LoggingService.log(MessageType.setup, "["+ myServerName+"]"+"Backup request server handle obtained.");
+	            
+	            //req handlers
+	         for(int i=0;i<numberOfReqServers;i++) {	
+	            	String s = "reqServer_"+(i+1);
+	            	Registry remoteRegistry  = LocateRegistry.getRegistry(serverIps.get(s), port);
+	    			MessagingHandler reqServerHandle = (MessagingHandler) remoteRegistry.lookup(s);
+	    			requestHandlingServers.put(s, reqServerHandle);
+	         }         
+	            //backup req handler
+	            Registry remoteRegistry  = LocateRegistry.getRegistry(serverIps.get("backupServerReq"), port);
+	            requestHandlingServers.put("backupServerReq", (MessagingHandler) remoteRegistry.lookup("backupServerReq"));
+	            requestHandlingServers.put("backupServerGame", (MessagingHandler) bkRegistry.lookup("backupServerGame"));
+	            
+	            //initialize battlefield
+	            battlefield = GameServer.getBattleField();            
+	            
+	            //initialize dragons
+	            initializeDragons(numberOfDragons);
+
+	            //send this info to respective servers
+	            requestHandlingServers.forEach((serverName, handler) -> {
+	            	try {
+						Message setupMessage = new Message();
+						setupMessage.put("id", 0);
+						setupMessage.put("dragons", setupDragons);
+						setupMessage.put("type", MessageType.setup);
+						LoggingService.log(MessageType.setup, "["+ myServerName+"]"+"Game server: send player and dragon setup message to "+serverName);
+						handler.onMessageReceived(setupMessage);
+					}catch (RemoteException e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
+					}
+				});  
+
+		} catch (RemoteException e1) {
+			// TODO Auto-generated catch block
+			e1.printStackTrace();
+		}
+  		} 
 	
 	private static void initializeDragons(int dragonCount) {
 		LoggingService.log(MessageType.setup, "["+ myServerName+"]"+"game server: Initialize dragons.");
