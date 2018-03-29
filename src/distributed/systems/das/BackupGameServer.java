@@ -407,7 +407,7 @@ public class BackupGameServer implements MessagingHandler {
 		int port = 1099;
 		numberOfReqServers = Integer.parseInt(args[1]);
 		try {
-			//LocateRegistry.createRegistry(port);
+			LocateRegistry.createRegistry(port);
             MessagingHandler gameServer = new BackupGameServer();
             MessagingHandler gameServerStub = (MessagingHandler) UnicastRemoteObject.exportObject(gameServer, 0);
             Registry registry = LocateRegistry.getRegistry();
