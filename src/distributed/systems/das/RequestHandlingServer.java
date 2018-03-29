@@ -320,7 +320,7 @@ public class RequestHandlingServer implements MessagingHandler {
 		try {
 			myServerName = args[0]; 
 			myServerNumber = Integer.parseInt(myServerName.split("_")[1]);
-			numberOfPlayers = Integer.parseInt(args[2]);
+			numberOfPlayers = Integer.parseInt(args[1]);
 			LocateRegistry.createRegistry(1099);
 			
 		} catch (RemoteException e) {
