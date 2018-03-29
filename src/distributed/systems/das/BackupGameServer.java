@@ -182,6 +182,7 @@ public class BackupGameServer implements MessagingHandler {
 			setupPlayers.forEach((k,v)->{
 				v.forEach(u -> placeUnitOnMap(u));
 			});*/
+			return null;
 		}
 		String text = "["+myServerName+"]"+"onMessageReceived: "+msg.get("id");
 		//LoggingService.log(msg.getMessageType(), text);
