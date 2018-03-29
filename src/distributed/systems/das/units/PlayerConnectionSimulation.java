@@ -136,11 +136,11 @@ public class PlayerConnectionSimulation implements Runnable{
 			}	
 		}
 		if(backupRequestHandlingServer != null) {
-			int start = serverNumber*noOfPlayers;
+			int start = (serverNumber-1)*noOfPlayers;
 			int end =  start + noOfPlayers;
 			for (int i = start; i < end; i++) {
-				int id = listPlayers.get(i-1).getId();
-				long sleepTime = (long) (listPlayers.get(i).getTimestamp() - listPlayers.get(i-1).getTimestamp());
+				int id = listPlayers.get(i).getId();
+				long sleepTime = (long) (listPlayers.get(i+1).getTimestamp() - listPlayers.get(i).getTimestamp());
 				(new Thread() {
 					public void run() {
 						try {
