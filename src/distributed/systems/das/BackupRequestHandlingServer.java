@@ -59,7 +59,7 @@ public class BackupRequestHandlingServer implements MessagingHandler{
 		createIpMap();	
 	}
 	private void createIpMap() {
-		File ipFile = new File("ipAddresses.txt");
+		File ipFile = new File("/home/ec2-user/ipAddresses.txt");
 		serverIps = new HashMap<String, String>();
 		try {
 			BufferedReader in = new BufferedReader(new FileReader(ipFile));

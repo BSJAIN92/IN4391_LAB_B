@@ -59,7 +59,7 @@ public class BackupGameServer implements MessagingHandler {
 	
 	private void createIpMap() {
 		serverIps = new HashMap<String, String>();
-		File ipFile = new File("ipAddresses.txt");
+		File ipFile = new File("/home/ec2-user/ipAddresses.txt");
 		try {
 			BufferedReader in = new BufferedReader(new FileReader(ipFile));
 			String line = null;
@@ -184,7 +184,7 @@ public class BackupGameServer implements MessagingHandler {
 			});*/
 		}
 		String text = "["+myServerName+"]"+"onMessageReceived: "+msg.get("id");
-		LoggingService.log(msg.getMessageType(), text);
+		//LoggingService.log(msg.getMessageType(), text);
 		Message reply = null;
 		Message sync = null;
 		String origin = (String)msg.get("origin");
